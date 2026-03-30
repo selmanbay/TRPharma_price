@@ -277,22 +277,26 @@ class NevzatDepot {
       });
       const details = await Promise.all(detailPromises);
 
-      // MF verisi doldur (mevcut mantık KORUNUYOR)
+      // MF ve Barkod verisi doldur
       details.forEach((d, i) => {
-         if (d && d.kampanyalar && d.kampanyalar.length > 0) {
-            let mfs = [];
-            d.kampanyalar.forEach(k => {
-               if (!k.mf) return;
-               const rawMf = String(k.mf);
-               const matches = rawMf.match(/(\d+\+\d+)/g);
-               if (matches) {
-                  matches.forEach(m => {
-                     if (!mfs.includes(m)) mfs.push(m);
-                  });
+         if (d) {
+            if (d.barkod) topItems[i].barkod = d.barkod;
+            
+            if (d.kampanyalar && d.kampanyalar.length > 0) {
+               let mfs = [];
+               d.kampanyalar.forEach(k => {
+                  if (!k.mf) return;
+                  const rawMf = String(k.mf);
+                  const matches = rawMf.match(/(\d+\+\d+)/g);
+                  if (matches) {
+                     matches.forEach(m => {
+                        if (!mfs.includes(m)) mfs.push(m);
+                     });
+                  }
+               });
+               if (mfs.length > 0) {
+                  topItems[i].malFazlasi = mfs.join(' / ');
                }
-            });
-            if (mfs.length > 0) {
-               topItems[i].malFazlasi = mfs.join(' / ');
             }
          }
       });

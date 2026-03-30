@@ -215,8 +215,8 @@ ipcMain.handle('inject-depot-cookies', async (_event, depotId, targetUrl) => {
 
 app.whenReady().then(() => {
   // Config updater logging (optional but good for debugging)
-  autoUpdater.logger = require('console');
-  autoUpdater.logger.transports.file.level = 'info';
+  autoUpdater.logger = console;
+  // Use console instead of electron-log as we don't have that dependency yet
 
   // Start Express server in the same process
   require('./src/server.js');
@@ -244,6 +244,19 @@ app.on('will-quit', () => {
 
 app.on('window-all-closed', () => {
   // On Windows, keep app running in tray
+});
+
+app.on('web-contents-created', (event, contents) => {
+  contents.on('context-menu', (event, params) => {
+    const menu = Menu.buildFromTemplate([
+      { label: 'Kes', role: 'cut', enabled: params.editFlags.canCut },
+      { label: 'Kopyala', role: 'copy', enabled: params.editFlags.canCopy },
+      { label: 'Yapıştır', role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { label: 'Tümünü Seç', role: 'selectAll' },
+    ]);
+    menu.popup();
+  });
 });
 
 app.on('activate', () => {

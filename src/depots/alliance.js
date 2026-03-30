@@ -9,24 +9,23 @@ const COMMON_HEADERS = {
   'x-requested-with': 'XMLHttpRequest',
 };
 
-// Extract all data-itemstring attributes from the HTML table response
-// Each attribute value is a base64-encoded JSON object
+const cheerio = require('cheerio');
+
 function parseHtmlResponse(html) {
   const results = [];
-  // Match data-itemstring="..." attributes (may be double or single quoted)
-  const regex = /data-itemstring="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
+  const $ = cheerio.load(html);
+  
+  $('[data-itemstring]').each((i, el) => {
     try {
-      const rawBase64 = match[1]; // Ham base64'ü sakla (CalculateItemTotals için)
+      const rawBase64 = $(el).attr('data-itemstring');
       const decoded = Buffer.from(rawBase64, 'base64').toString('utf-8');
       const item = JSON.parse(decoded);
       item._rawBase64 = rawBase64;
       results.push(item);
     } catch (e) {
-      // skip malformed entries
+      // skip
     }
-  }
+  });
   return results;
 }
 
@@ -59,8 +58,8 @@ class AllianceDepot {
       });
 
       let cookie = this._extractCookies(getRes.headers['set-cookie']);
-      const match = getRes.data.match(/name="__RequestVerificationToken"[^>]+value="([^"]+)"/);
-      const token = match ? match[1] : '';
+      const $ = cheerio.load(getRes.data);
+      const token = $('input[name="__RequestVerificationToken"]').val() || '';
 
       const body = {
         UserName: kullaniciAdi,
@@ -200,33 +199,70 @@ class AllianceDepot {
   /**
    * Gerçek fiyat hesaplama — CalculateItemTotals ile GrossTotal al
    */
-  async calculatePrice(rawBase64, firstOffer) {
-    if (!this.cookies || !rawBase64 || !firstOffer) return null;
+  async calculatePrice(rawBase64, firstOffer, itemId) {
+    if (!this.cookies || !rawBase64) return null;
     try {
-      const offerBase64 = Buffer.from(JSON.stringify(firstOffer)).toString('base64');
+      let activeOffer = firstOffer;
+      
+      // Eğer kampanya yoksa, gidip GetItemOffers'tan çekelim
+      if (!activeOffer && itemId) {
+        try {
+          const offersHeaders = {
+            ...COMMON_HEADERS,
+            cookie: this.cookies,
+            referer: `${BASE_URL}/Sales/QuickOrder`,
+          };
+          const offersRes = await axios.get(`${BASE_URL}/Sales/GetItemOffers?id=${itemId}`, {
+            headers: offersHeaders,
+            timeout: 4000
+          });
+          
+          if (offersRes.data && Array.isArray(offersRes.data) && offersRes.data.length > 0) {
+            // İlk aktif teklifi al
+            activeOffer = offersRes.data[0];
+          }
+        } catch (e) {
+          // GetItemOffers fail olsa da devam et (belki kampanya yoktur)
+        }
+      }
+
+      const offerBase64 = activeOffer ? Buffer.from(JSON.stringify(activeOffer)).toString('base64') : "";
+      
+      const calcHeaders = {
+          ...COMMON_HEADERS,
+          cookie: this.cookies,
+          origin: BASE_URL,
+          referer: `${BASE_URL}/Sales/QuickOrder`,
+          'request-context': 'appId=cid-v1:acfd4aec-ad85-4f12-9a2a-e5dc718d8a5b',
+          'request-id': `|antigravity.${Math.random().toString(36).substring(7)}`
+      };
+      if (this.token && this.token !== '_none_') {
+        calcHeaders['__requestverificationtoken'] = this.token;
+      }
+
       const res = await axios.post(
         `${BASE_URL}/Sales/CalculateItemTotals`,
         {
           ItemString: rawBase64,
           OfferString: offerBase64,
-          Quantity: '01',
-          OfferChanged: false,
+          Quantity: 1, // Number
+          OfferChanged: true, // Boolean
         },
         {
-          headers: {
-            ...COMMON_HEADERS,
-            cookie: this.cookies,
-            origin: BASE_URL,
-            referer: `${BASE_URL}/Sales/QuickOrder`,
-          },
+          headers: calcHeaders,
           timeout: 6000,
         }
       );
+      
       if (res.data?.Result === true && res.data?.Value) {
-        return { grossTotal: res.data.Value.GrossTotal };
+        const gross = res.data.Value.GrossTotal;
+        console.log(`[ALLIANCE] Calculate success: ${gross}`);
+        return { grossTotal: gross };
       }
+      console.warn(`[ALLIANCE] Calculate failed: ${res.data?.Message || 'No value'}`);
       return null;
     } catch (err) {
+      console.error(`[ALLIANCE] Calculate ERROR:`, err.message);
       return null;
     }
   }
@@ -239,7 +275,7 @@ class AllianceDepot {
     const topItems = items.slice(0, 10);
 
     const pricePromises = topItems.map(item =>
-      this.calculatePrice(item._rawBase64, item._firstOffer).catch(() => null)
+      this.calculatePrice(item._rawBase64, item._firstOffer, item._itemId).catch(() => null)
     );
     const prices = await Promise.all(pricePromises);
 
@@ -291,7 +327,8 @@ class AllianceDepot {
           imgUrl: '',
           malFazlasi: '',
           _rawBase64: item._rawBase64 || null,
-          _firstOffer: item.Offers?.[0] || null,
+          _itemId: item.ID || null,
+          _firstOffer: (item.Offers && item.Offers.length > 0) ? item.Offers[0] : (item.Campaign ? item.Campaign : null),
         };
       }),
     };

@@ -67,14 +67,14 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 - **Nevzat Ecza** (`nevzat.js`): Selçuk ile birebir aynı yapı (Boyut Bilişim altyapısı)
   - Aynı `calculatePrice()` + `_fetchMFAndReturn()` mantığı
   - NOT: Nevzat'ta satisSekli "E2" gelebilir, Selçuk'ta "A6" — her zaman kampanyalardan al!
-- **Alliance Healthcare** (`alliance.js`): Farklı mimari
-  - Endpoint: `POST /Sales/CalculateItemTotals`
-  - Request: `{ ItemString: <rawBase64>, OfferString: <firstOffer base64>, Quantity: "01" }`
-  - Response field: `Value.GrossTotal` — KDV dahil net tutar
-  - `parseHtmlResponse()` artık `_rawBase64` saklıyor
-  - `_parseResults()` artık `_rawBase64` ve `_firstOffer` döndürüyor
-  - `_fetchPricesAndReturn()` method eklendi — search/doSearch sonrasında çağrılıyor
-  - İç alanlar (`_rawBase64`, `_firstOffer`) response'tan temizleniyor
+- **Alliance Healthcare** (`alliance.js`): Gelişmiş Hesaplama Mimarisi
+  - **Sorun**: Arama sonuçları kampanyasız (liste) fiyatı (136,55) döndüğü için Net Tutar alınamıyordu.
+  - **Çözüm (30 Mart 2026)**: 3 aşamalı fiyatlandırma akışı:
+    1. `SearchItems`: Ürün metadata (ItemString) çekilir. **KRİTİK:** `SelectedClass: "3"` parametresi zorunludur, aksi halde kampanyalar gelmez.
+    2. `GetItemOffers?id=[itemId]`: Eğer `Offers` boşsa, bu servisle o ürüne özel aktif indirim teklifleri zorla çekilir.
+    3. `CalculateItemTotals`: Çekilen kampanya ve ürün verisiyle deponun hesaplama motoruna gidilerek **`GrossTotal` (124,76)** alanı yakalanır.
+  - **Kritik Payload**: `{ ItemString: <rawBase64>, OfferString: <offer base64>, Quantity: 1, OfferChanged: true }`. **NOT:** Quantity `Number` olmalıdır, `String` olursa hata verir.
+  - Fallback: Tüm aşamalar fail olursa orijinal arama fiyatı korunur.
 - **Doğru olan depolar**: Anadolu İtriyat ✅, Anadolu Pharma ✅, Sentez ✅ — değişiklik yok
 - **Fallback**: Hesaplama hatası olursa orijinal fiyat korunur (graceful)
 - **Performans**: Her depo için +10 paralel API çağrısı (~500ms ek süre)
@@ -104,6 +104,21 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 ### Sayfa Geçişleri
 - CSS animasyonları: `page-enter`, `page-exit`, `page-enter-home`, `page-exit-home`
 - Stagger animasyonlar: `.stagger-enter.stagger-delay-N`
+
+### UX Dev: Variant Selection Layer (30 Mart 2026)
+- **Problem**: Aynı ilacın farklı formları (Tablet, Şurup vb.) tek bir listede alt alta gelince oluşan karmaşa
+- **Çözüm**: Arama sonuçları ile detay ekranı arasına "Seçim Katmanı" eklendi.
+- **Normalleşme**: `normalizeDrugName()` ile "TB", "TABLET" gibi ekler temizlenerek ortak formlar bulunur.
+- **Entity ID = Barkod**: Her ilaç bir varlıktır ve varlığın ID'si barkoddur. Aynı barkoda sahip tüm satırlar tek bir kartta birleşir.
+- **Çapraz Sorgu (Cross-Reference)**: Eğer bir depoda (örn. Selçuk) barkod yoksa ama başka bir depoda (örn. Alliance) aynı isimli ürünün barkodu varsa, uygulama barkodu diğerine "enjekte eder" ve birleşme sağlar.
+- **Stabilite (Gathering Delay)**: Veriler asenkron akarken kartların zıplamaması için `MIN_GATHER_TIME = 1500ms` kuralı uygulanır. İlk 1.5 saniye sonuçlar arka planda toplanır, sonra stabil olarak gösterilir.
+- **Barkod Bypass**: Arama kutusuna direkt 13 haneli barkod okutulursa varyant ekranı otomatik atlanıp detaylara gidilir.
+- **Karekod (DataMatrix) Stabilizasyonu (30 Mart 2026)**:
+  - **Parsing**: `renderer/scripts/app.js` içindeki `parseQRCode` fonksiyonu GS1 DataMatrix standartlarını (01 barkod + 21 seri vb.) ayıklar.
+  - **Anti-Flicker**: Arama sırasında ekranın titremesini önlemek için `resultsBody` temizleme işlemi 100ms geciktirilir ve aynı query için 300ms debounce uygulanır.
+
+### Context Menu (Sağ Tık)
+- Electron'da WebView ve Main Window için sağ tık menüsü (Kopyala, Yapıştır, Kes) `main.js` içinde `web-contents-created` kancasıyla aktif edilmiştir. Depo panellerinde kopyalama yapılabilir.
 
 ---
 
@@ -155,7 +170,8 @@ eczane-app/
 ## Son Güncelleme
 
 **Tarih**: 30 Mart 2026
-**Session**: Unified Architecture & Development Workflow Rules, Gereksiz Dizin Temizliği
+**Session**: UX Dev: Variant Selection Layer & Barcode-Driven Entity Model
+**Plan**: Barkod odaklı tekil ürün (Entity) tasarımı ve stabilite (Gathering delay) iyileştirmesi.
 
 ---
 

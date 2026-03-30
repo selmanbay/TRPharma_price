@@ -96,18 +96,32 @@ document.addEventListener('click', e => {
 });
 
 function homeSearch() {
-  const q = document.getElementById('homeSearchInput').value.trim();
+  let q = document.getElementById('homeSearchInput').value.trim();
   if (!q) return;
+
+  // Karekod mu?
+  const cleanBarcode = parseQRCode(q);
+  if (cleanBarcode && cleanBarcode.length === 13) {
+    q = cleanBarcode;
+    selectedBarcode = cleanBarcode;
+  }
+
   document.getElementById('searchInput').value = q;
   showPage('search');
   doSearch();
 }
 
 document.getElementById('homeSearchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !document.getElementById('homeSuggestions').classList.contains('open')) homeSearch();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    homeSearch();
+  }
 });
 document.getElementById('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !document.getElementById('searchSuggestions').classList.contains('open')) doSearch();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    doSearch();
+  }
 });
 
 // ── Keyboard shortcuts ──
@@ -133,20 +147,89 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── Barcode extraction ──
+// ── Barcode extraction & QR Parsing ──
 function extractBarcode(kodu) {
   if (!kodu) return null;
   const str = String(kodu).trim();
-  if (str.startsWith('8')) return str;
+  // Barkodlar genelde 86 ile başlar ve 13 hanelidir.
+  if (str.length >= 13 && str.startsWith('8')) return str;
   return null;
+}
+
+/**
+ * Karekod (GS1 DataMatrix) içinden 13 haneli barkodu ayıklar.
+ * Örn: 010869953609011521... -> 8699536090115
+ */
+function parseQRCode(input) {
+  if (!input) return null;
+  const raw = String(input).trim();
+  
+  // 1. Zaten temiz barkodsa direkt döndür (0 dolgusuz 13 hane)
+  if (/^869\d{10}$/.test(raw)) return raw;
+  
+  // 2. 0 ile başlayan 14 haneli (0+869...) ise 0'ı at
+  if (/^0869\d{10}$/.test(raw)) return raw.substring(1);
+
+  // 3. GS1 DataMatrix: 01 ile başlar, 14 haneli GTIN içerir
+  if (raw.startsWith('01') && raw.length >= 16) {
+    // 01(2 hane) + 0(dolgu 1 hane) + 13(barkod)
+    const gtinCandidate = raw.substring(3, 16);
+    if (gtinCandidate.startsWith('869')) return gtinCandidate;
+    
+    // Bazı dolgu senaryoları için (Padding check)
+    const gtinCandidate2 = raw.substring(2, 15);
+    if (gtinCandidate2.startsWith('869')) return gtinCandidate2;
+  }
+
+  // 4. Fallback search: Herhangi bir 869... 13 haneli dizisi bul
+  const match = raw.match(/869\d{10}/);
+  return match ? match[0] : raw;
 }
 
 // ── Search ──
 let selectedBarcode = null;
+let selectedVariant = null;
+
+function normalizeDrugName(name) {
+  if (!name) return 'Bilinmeyen İlaç Formu';
+  let n = name.toUpperCase().replace(/İ/g, 'I');
+  // Kısaltmaları normalize et
+  n = n.replace(/\b(TABLET|TAB\.|TB\.|TAB|TB)\b/g, 'TAB');
+  n = n.replace(/\b(KAPSUL|KAPSÜL|KAP\.|KPS\.)\b/g, 'KAP');
+  n = n.replace(/\b(FILM TAB|FLM TAB|FLM\.TAB|F\.TAB|F\. TABLET|FILM TABLET)\b/g, 'FILM TAB');
+  n = n.replace(/\b(SURUP|ŞURUP|SRP|SYR)\b/g, 'ŞURUP');
+  n = n.replace(/\b(SUSPANSIYON|SÜSPANSİYON|SÜSP\.)\b/g, 'SÜSP');
+  n = n.replace(/\b(PED\.|PEDIATRIK|PEDİATRİK)\b/g, 'PED');
+  n = n.replace(/\s+/g, ' ').trim();
+  return n;
+}
+
+let searchStartTime = 0;
+const MIN_GATHER_TIME = 1500; // 1.5 saniye bekle ki kartlar zıplamasın
+
+let lastSearchQuery = null;
+let lastSearchTime = 0;
 
 async function doSearch() {
+  const nowTime = Date.now();
   const input = document.getElementById('searchInput');
-  const query = selectedBarcode || input.value.trim();
+  let query = selectedBarcode || input.value.trim();
+
+  // Karekod analizi
+  const cleanBarcode = parseQRCode(query);
+  if (cleanBarcode && cleanBarcode.length === 13) {
+    query = cleanBarcode;
+    input.value = cleanBarcode;
+  }
+
+  // 300ms içinde aynı arama geldiyse (karekod hızı) blokla
+  if (query === lastSearchQuery && (nowTime - lastSearchTime < 300)) return;
+  
+  lastSearchQuery = query;
+  lastSearchTime = nowTime;
+  selectedVariant = null;
+  searchStartTime = nowTime;
+  selectedBarcode = null; 
   if (!query) return;
 
   const loading = document.getElementById('loading');
@@ -161,7 +244,7 @@ async function doSearch() {
   }
 
   const activeDepots = DEPOT_LIST.filter(d => {
-    const info = cachedConfig.depots[d.id];
+    const info = (cachedConfig.depots && cachedConfig.depots[d.id]) ? cachedConfig.depots[d.id] : null;
     return info && (info.hasCredentials || info.hasCookies || info.hasToken);
   });
 
@@ -174,13 +257,21 @@ async function doSearch() {
   let allItems = [];
   let pendingReqs = activeDepots.length;
 
+  // Ekran titremesini önle: UI'ı sadece ilk 100ms'den sonra temizle (eğer sonuç yoksa)
+  setTimeout(() => {
+    if (Date.now() - searchStartTime >= 100) {
+      const resultsBody = document.getElementById('resultsBody');
+      if (resultsBody) resultsBody.innerHTML = '';
+    }
+  }, 100);
+
+  document.getElementById('variantSelectionLayer').style.display = 'none';
   document.getElementById('productCard').style.display = 'none';
   document.getElementById('bestPriceCard').style.display = 'none';
   document.getElementById('otherDepots').style.display = 'none';
   document.getElementById('stockCalcPanel').classList.remove('open');
   document.getElementById('stockCalcTrigger').style.display = 'none';
   document.getElementById('stockCalcTrigger').classList.remove('open');
-  document.getElementById('resultsBody').innerHTML = '';
 
   activeDepots.forEach(depot => {
     fetch(`${API_BASE}/api/search-depot?q=${encodeURIComponent(query)}&depotId=${depot.id}`)
@@ -217,6 +308,155 @@ async function doSearch() {
 }
 
 function renderResults(items, query) {
+  if (!items || items.length === 0) return;
+
+  const isBarcode = /^\d{8,}$/.test(query);
+  const now = Date.now();
+  const elapsed = now - searchStartTime;
+
+  // 1.5 saniye dolmadan sonuç gösterme (Görsel stabilite için)
+  if (!isBarcode && selectedVariant === null && elapsed < MIN_GATHER_TIME) {
+    return;
+  }
+
+  if (isBarcode || selectedVariant !== null) {
+    // If scanning a barcode or if user already picked a variant, show final details.
+    const filteredItems = isBarcode ? items : items.filter(i => normalizeDrugName(i.ad) === selectedVariant);
+    
+    // Switch UI
+    document.getElementById('variantSelectionLayer').style.display = 'none';
+    
+    if (filteredItems.length > 0) {
+      renderDetailResults(filteredItems, query);
+    }
+    return;
+  }
+
+  // Not a barcode and no variant selected yet: GROUP MODE
+  
+  // 1. AŞAMA: İsim -> Barkod haritası çıkar (Bir depoda barkod varsa diğerindeki barkodsuz aynı ismi besleyelim)
+  const nameToBarcode = new Map();
+  items.forEach(i => {
+    const barcode = i.barkod || extractBarcode(i.kodu);
+    const norm = normalizeDrugName(i.ad);
+    if (barcode && !nameToBarcode.has(norm)) {
+      nameToBarcode.set(norm, barcode);
+    }
+  });
+
+  // 2. AŞAMA: Gruplama yap
+  const groups = new Map();
+  items.forEach(i => {
+    let barcode = i.barkod || extractBarcode(i.kodu);
+    const normName = normalizeDrugName(i.ad);
+    
+    // Cross-ref: Eğer bu isme ait bir barkod başka bir depoda varsa onu kullan
+    if (!barcode && nameToBarcode.has(normName)) {
+      barcode = nameToBarcode.get(normName);
+    }
+
+    const groupKey = barcode || ("NAME_" + normName);
+    const hasValidImg = i.imgUrl && !['yok', 'no-image', 'c=.png'].some(k => i.imgUrl.includes(k));
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        id: groupKey,
+        barcode: barcode,
+        normalizedName: normName,
+        originalName: i.ad,
+        count: 0,
+        bestPrice: Infinity,
+        imgUrl: hasValidImg ? i.imgUrl : null
+      });
+    }
+    const g = groups.get(groupKey);
+    g.count++;
+    
+    if (i.fiyatNum > 0 && i.fiyatNum < g.bestPrice) {
+      g.bestPrice = i.fiyatNum;
+    }
+    
+    if (!g.imgUrl && hasValidImg) g.imgUrl = i.imgUrl;
+    
+    // İsim temizleme: En kısa olanı (en jenerik olanı) seç
+    if (i.ad.length < g.originalName.length) {
+      g.originalName = i.ad;
+    }
+  });
+
+  const uniqueGroups = Array.from(groups.values());
+
+  if (uniqueGroups.length === 1) {
+    // Auto-select if only 1 variant exists (or if normalization merged everything into 1)
+    selectedVariant = uniqueGroups[0].normalizedName;
+    document.getElementById('variantSelectionLayer').style.display = 'none';
+    renderDetailResults(items, query);
+    return;
+  }
+
+  // Render the Variant Layer
+  renderVariantSelectionLayer(uniqueGroups, query, items);
+}
+
+function renderVariantSelectionLayer(groups, query, allItems) {
+  // Sort variants alphabetically for consistent jumping fix
+  groups.sort((a, b) => a.normalizedName.localeCompare(b.normalizedName));
+
+  document.getElementById('productCard').style.display = 'none';
+  document.getElementById('bestPriceCard').style.display = 'none';
+  document.getElementById('otherDepots').style.display = 'none';
+
+  const layer = document.getElementById('variantSelectionLayer');
+  layer.style.display = 'block';
+
+  document.getElementById('variantCount').textContent = groups.length;
+  const container = document.getElementById('variantCardsContainer');
+  container.innerHTML = '';
+
+  groups.forEach(g => {
+    const card = document.createElement('div');
+    card.className = 'variant-card-list';
+    const hasPrice = g.bestPrice !== Infinity;
+    const priceText = hasPrice ? `₺${g.bestPrice.toFixed(2)}'den başlayan` : 'Stokta yok';
+    
+    card.innerHTML = `
+      <div class="v-list-img">
+        ${g.imgUrl ? `<img src="${g.imgUrl}" alt="">` : `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          </svg>
+        `}
+      </div>
+      <div class="v-list-content">
+        <div class="variant-card-title">${g.originalName}</div>
+        <div class="variant-card-meta">
+          <span class="v-list-price">${priceText}</span>
+          <span class="v-list-dot"></span>
+          <span class="v-list-count">${g.count} Depo</span>
+        </div>
+      </div>
+      <div class="v-list-arrow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    `;
+
+    card.onclick = () => {
+      // ... click logic remains same ...
+      if (g.barcode) {
+        selectedBarcode = g.barcode;
+        document.getElementById('searchInput').value = g.barcode;
+        doSearch();
+      } else {
+        selectedVariant = g.normalizedName;
+        renderResults(allItems, query);
+      }
+    };
+
+    container.appendChild(card);
+  });
+}
+
+function renderDetailResults(items, query) {
   if (!items || items.length === 0) return;
 
   const productCard = document.getElementById('productCard');
