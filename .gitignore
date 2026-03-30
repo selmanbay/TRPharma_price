@@ -1,0 +1,27 @@
+# ── IDE & Editor ──
+.cursor/
+.claude/
+.vscode/
+
+# ── Build & NPM ──
+node_modules/
+dist/
+build/
+*.log
+
+# ── Security & Credentials (CRITICAL) ──
+# DİKKAT: Bütün eczacının b2b şifreleri config.json'dadır. GİT'e GİTMEYECEKTİR!
+config.json
+# DİKKAT: Kullanıcının son arattığı ilaçların listesi (hasta mahremiyeti) gitmeyecektir.
+data/history.json
+
+# ── Backup & Archives ──
+_archive/
+_backups/
+*.zip
+*.rar
+*.bak
+
+# ── OS ──
+Thumbs.db
+.DS_Store
