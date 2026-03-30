@@ -38,8 +38,8 @@
       "publish": [
         {
           "provider": "github",
-          "owner": "selman", 
-          "repo": "eczane-app",
+          "owner": "selmanbay", 
+          "repo": "TRPharma_price",
           "releaseType": "release"
         }
       ]
