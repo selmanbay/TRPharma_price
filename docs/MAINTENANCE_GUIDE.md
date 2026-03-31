@@ -330,3 +330,4 @@ Kritik ayrim:
 - `git push` tek basina updater icin yeterli degildir
 - updater icin GitHub `release` ve release asset'leri gerekir
 - packaged uygulama yeni release metadata dosyasini gorunce update bulur
+- tercih edilen operasyon artik `vX.Y.Z` tag push + GitHub Actions release akisi uzerindendir

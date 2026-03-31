@@ -7,9 +7,12 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "server": "node src/server.js",
+    "release:check": "node scripts/validate-release.js",
     "build": "electron-builder",
-    "build:win": "electron-builder --win --x64",
-    "release:win": "electron-builder --win --x64 --publish always"
+    "build:win": "npm run release:check && electron-builder --win --x64",
+    "release:local": "npm run release:check && electron-builder --win --x64",
+    "release:ci": "npm run release:check && electron-builder --win --x64 --publish always",
+    "release:win": "npm run release:ci"
   },
   "keywords": [],
   "author": "",

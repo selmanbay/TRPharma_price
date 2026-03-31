@@ -10,6 +10,11 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let updateDownloaded = false;
+let updateCheckInFlight = false;
+let updateCheckInterval = null;
+
+const UPDATE_CHECK_DELAY_MS = 15 * 1000;
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'icon.png');
@@ -115,6 +120,7 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('checking-for-update', () => {
+    updateCheckInFlight = true;
     console.log('[updater] Checking for updates...');
   });
 
@@ -123,10 +129,12 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-not-available', (info) => {
+    updateCheckInFlight = false;
     console.log(`[updater] No update available. Current latest: ${info?.version || app.getVersion()}`);
   });
 
   autoUpdater.on('error', (error) => {
+    updateCheckInFlight = false;
     console.error('[updater] Error:', error?.message || error);
   });
 
@@ -136,6 +144,7 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', async (info) => {
+    updateCheckInFlight = false;
     updateDownloaded = true;
     console.log(`[updater] Update downloaded: ${info?.version || 'unknown-version'}`);
 
@@ -155,6 +164,27 @@ function setupAutoUpdater() {
       autoUpdater.quitAndInstall(false, true);
     }
   });
+}
+
+function scheduleUpdateChecks() {
+  if (!app.isPackaged) {
+    console.log('[updater] Skipping update schedule in development mode.');
+    return;
+  }
+
+  const runCheck = () => {
+    if (updateCheckInFlight || updateDownloaded) {
+      return;
+    }
+
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      updateCheckInFlight = false;
+      console.error('[updater] Scheduled update check failed:', error?.message || error);
+    });
+  };
+
+  setTimeout(runCheck, UPDATE_CHECK_DELAY_MS);
+  updateCheckInterval = setInterval(runCheck, UPDATE_CHECK_INTERVAL_MS);
 }
 
 // ── IPC Handlers ──
@@ -273,15 +303,7 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
     registerShortcuts();
-
-    // Check for OTA updates only in packaged builds.
-    if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify().catch(e => {
-        console.error('Update check failed: ', e.message);
-      });
-    } else {
-      console.log('[updater] Skipping update check in development mode.');
-    }
+    scheduleUpdateChecks();
   }, 1000);
 });
 
@@ -290,6 +312,10 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  if (updateCheckInterval) {
+    clearInterval(updateCheckInterval);
+    updateCheckInterval = null;
+  }
   globalShortcut.unregisterAll();
 });
 

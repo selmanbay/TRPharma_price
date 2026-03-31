@@ -118,3 +118,42 @@ Release sonrasi:
 2. `latest.yml` yuklendi mi
 3. `Eczane Setup 2.0.2.exe` yuklendi mi
 4. `2.0.1` uygulamasi yeni surumu buluyor mu
+
+## 11. Profesyonel ve Stabil Dagitim Modeli
+
+Bu proje icin artik onerilen model sudur:
+
+1. Surum `package.json` icinde arttirilir
+2. Yerelde `npm run build:win` ile paketleme dogrulanir
+3. Kod `main` branch'ine push edilir
+4. Aynı surumu tasiyan `vX.Y.Z` tag'i push edilir
+5. GitHub Actions Windows release'i otomatik uretir
+6. GitHub Release asset'leri olusur
+7. Kurulu eczaci uygulamalari bu release'i updater ile gorur
+
+Bu modelin faydasi:
+
+- her eczaciya yeniden setup atma ihtiyacini azaltir
+- release surecini kisiden bagimsiz hale getirir
+- surum ve tag uyumsuzlugunu otomatik yakalar
+
+## 12. Repo Tarafinda Uygulanan Stabilite Katmanlari
+
+- `.github/workflows/release.yml` ile otomatik Windows release pipeline
+- `scripts/validate-release.js` ile surum, publish ve tag kontrolu
+- `main.js` icinde packaged uygulamada gecikmeli ve periyodik update kontrolu
+
+## 13. Artik Kullanilacak Ana Akis
+
+Her yeni surumde pratikte yapacagin sey:
+
+```powershell
+npm run build:win
+git add .
+git commit -m "release: vX.Y.Z"
+git push origin main
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+Bu tag push sonrasinda release workflow'u setup dosyasini ve `latest.yml` dosyasini otomatik olusturursa, kurulu eski surumler yeni guncellemeyi bulabilir.

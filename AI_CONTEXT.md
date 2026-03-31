@@ -49,6 +49,9 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 - **Runtime Kuralı**: Auto-update kontrolü yalnızca packaged uygulamada yapılır (`app.isPackaged`).
 - **UX**: Update indirildiğinde kullanıcıya "Şimdi Yeniden Başlat / Daha Sonra" penceresi gösterilir.
 - **Doküman**: Release zinciri `docs/UPDATER_RELEASE_PLAN.md` içine yazıldı.
+- **Otomasyon**: `.github/workflows/release.yml` ile `v*` tag push release tetikleyicisi eklendi.
+- **Doğrulama**: `scripts/validate-release.js` tag ve version eşleşmesini kontrol eder.
+- **Zamanlama**: Packaged uygulama açılıştan kısa süre sonra ve 6 saatte bir update kontrolü yapar.
 
 ### Stok Filtreleme (server.js satır 203)
 - **Filtre**: `if (!product.stokVar || (product.stok === 0 && product.stokGosterilsin)) continue;`

@@ -21,6 +21,7 @@ _backups/
 *.zip
 *.rar
 *.bak
+Eczane_v*_Guncel/
 
 # ── OS ──
 Thumbs.db

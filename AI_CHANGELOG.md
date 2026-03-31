@@ -10,6 +10,32 @@
 ---
 
 ### @LATEST_CHANGE
+**TIMESTAMP:** 2026-03-31T11:00:00
+**SESSION:** Release Automation Stabilization
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `.github/workflows/release.yml` | `v*` tag veya manuel tetikleme ile Windows release publish eden GitHub Actions pipeline eklendi.
+- `scripts/validate-release.js` | Version formatini, GitHub publish ayarini ve tag-version eslesmesini dogrulayan release check scripti eklendi.
+- `package.json` | `release:check`, `release:local`, `release:ci` scriptleri eklendi; `build:win` release dogrulama ile guclendirildi.
+- `main.js` | Updater kontrolu packaged acilistan 15 saniye sonra ve ardindan 6 saatte bir calisacak sekilde guclendirildi.
+- `docs/UPDATER_RELEASE_PLAN.md` | Elle setup dagitimi yerine tag tabanli profesyonel release akisina ek notlar eklendi.
+- `docs/MAINTENANCE_GUIDE.md` | Tag push + GitHub Actions release modeli not edildi.
+- `AI_CONTEXT.md` | Release otomasyonu ve periyodik updater davranisi proje hafizasina eklendi.
+- `AI_CHANGELOG.md` | Son degisiklik kaydi guncellendi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** GitHub Actions release pipeline
+- **ADDED:** Release validation scripti
+- **ADDED:** Periyodik updater kontrol mantigi
+- **REMOVED:** Yok
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+Updater artik source push'a degil release asset zincirine dayanir. Eczacilarin tek tek setup almamasi icin `package.json` version ile git tag daima birebir eslesmeli ve release asset'leri public indirilebilir olmalidir.
+
+---
+
+### @ARCHIVED_CHANGE_011
 **TIMESTAMP:** 2026-03-31T10:40:00
 **SESSION:** Updater 2.0.2 Hardening
 **AGENT:** Codex
