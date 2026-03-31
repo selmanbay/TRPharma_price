@@ -10,6 +10,30 @@
 ---
 
 ### @LATEST_CHANGE
+**TIMESTAMP:** 2026-03-31T12:10:00
+**SESSION:** UI Fix Release 2.0.3
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `package.json` | Sürüm `2.0.3` yapıldı.
+- `renderer/index.html` | Sipariş planı için `Plani Incele` aksiyonu ve ayrı plan detay sayfası eklendi.
+- `renderer/scripts/app.js` | Sipariş planı toplam mantığı düzeltildi, MF sadece explicit miktarda uygulanır hale getirildi, plan detay ekranı ve göreli görsel URL düzeltmesi eklendi.
+- `renderer/styles/main.css` | Plan detay ekranı, boş rutin liste gizleme düzeni ve görsel fallback stilleri eklendi.
+- `AI_CONTEXT.md` | 2.0.3 UI fix release notları eklendi.
+- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** Sipariş planı inceleme ekranı
+- **ADDED:** Göreli görsel URL normalize mantığı
+- **ADDED:** Kırık resim fallback davranışı
+- **FIXED:** Yanlış kampanya/toplam yansıması
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+Bu release yalnızca UI/workflow katmanını etkiler. Search, fiyat hesaplama çekirdeği, login ve depo adaptörlerinin ağ akışı değiştirilmemiştir. Updater testi için `v2.0.3` tag release asset'lerinin oluşması gerekir.
+
+---
+
+### @ARCHIVED_CHANGE_012
 **TIMESTAMP:** 2026-03-31T11:00:00
 **SESSION:** Release Automation Stabilization
 **AGENT:** Codex

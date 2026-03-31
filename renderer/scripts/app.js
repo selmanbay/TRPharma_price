@@ -77,6 +77,7 @@ function showPage(name) {
     if (name === 'search') document.getElementById('searchInput').focus();
     if (name === 'settings') renderSettings();
     if (name === 'history') renderHistory();
+    if (name === 'order-plan') renderOrderPlanDetail();
   }, isBack ? 180 : 200);
 }
 
@@ -213,7 +214,7 @@ function writeStoredJson(key, value) {
 }
 
 function getOrderPlan() {
-  return readStoredJson(STORAGE_KEYS.orderPlan, []);
+  return readStoredJson(STORAGE_KEYS.orderPlan, []).map(normalizeOrderPlanItem);
 }
 
 function saveOrderPlan(items) {
@@ -228,11 +229,88 @@ function saveRoutineList(items) {
   writeStoredJson(STORAGE_KEYS.routineList, items);
 }
 
+function normalizeOrderPlanItem(item) {
+  const nextItem = {
+    ...item,
+    desiredQty: Math.max(parseInt(item?.desiredQty, 10) || 1, 1),
+    orderQty: Math.max(parseInt(item?.orderQty, 10) || 0, 0),
+    receiveQty: Math.max(parseInt(item?.receiveQty, 10) || 0, 0),
+    totalCost: Number(item?.totalCost) || 0,
+    effectiveUnit: Number(item?.effectiveUnit) || 0,
+    planningMode: item?.planningMode || 'unit',
+  };
+
+  const legacyMf = parseMf(nextItem.mfStr);
+  const isLegacySingleUnitMf =
+    nextItem.planningMode !== 'mf' &&
+    nextItem.desiredQty === 1 &&
+    legacyMf &&
+    nextItem.orderQty > 1 &&
+    nextItem.receiveQty > 1 &&
+    nextItem.totalCost > 0;
+
+  if (isLegacySingleUnitMf) {
+    const derivedUnitPrice = nextItem.orderQty > 0 ? nextItem.totalCost / nextItem.orderQty : nextItem.totalCost;
+    nextItem.orderQty = 1;
+    nextItem.receiveQty = 1;
+    nextItem.totalCost = derivedUnitPrice;
+    nextItem.effectiveUnit = derivedUnitPrice;
+    nextItem.planningMode = 'unit';
+  }
+
+  return nextItem;
+}
+
 function slugifyName(value) {
   return String(value || '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function normalizeImageUrl(url, baseUrl = '') {
+  if (!url) return '';
+  const raw = String(url).trim();
+  if (!raw) return '';
+  if (raw.startsWith('//')) return `https:${raw}`;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (baseUrl) {
+    try {
+      return new URL(raw, baseUrl).toString();
+    } catch {}
+  }
+  return raw;
+}
+
+function isUsableImageUrl(url) {
+  if (!url) return false;
+  const lower = String(url).toLowerCase();
+  return !['yok', 'no-image', 'noimage', 'default', 'c=.png'].some((keyword) => lower.includes(keyword));
+}
+
+function getImageFallbackSvg(size = 24) {
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+    </svg>
+  `;
+}
+
+function buildVariantImageMarkup(url) {
+  const normalized = normalizeImageUrl(url);
+  if (!normalized || !isUsableImageUrl(normalized)) {
+    return `<div class="v-list-img-fallback">${getImageFallbackSvg(24)}</div>`;
+  }
+
+  return `
+    <img
+      src="${esc(normalized)}"
+      alt=""
+      loading="lazy"
+      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+    />
+    <div class="v-list-img-fallback" style="display:none;">${getImageFallbackSvg(24)}</div>
+  `;
 }
 
 function normalizeDrugName(name) {
@@ -404,7 +482,8 @@ function renderResults(items, query) {
     }
 
     const groupKey = barcode || ("NAME_" + normName);
-    const hasValidImg = i.imgUrl && !['yok', 'no-image', 'c=.png'].some(k => i.imgUrl.includes(k));
+    const normalizedImgUrl = normalizeImageUrl(i.imgUrl, i.depotUrl);
+    const hasValidImg = isUsableImageUrl(normalizedImgUrl);
 
     if (!groups.has(groupKey)) {
       groups.set(groupKey, {
@@ -414,7 +493,7 @@ function renderResults(items, query) {
         originalName: i.ad,
         count: 0,
         bestPrice: Infinity,
-        imgUrl: hasValidImg ? i.imgUrl : null
+        imgUrl: hasValidImg ? normalizedImgUrl : null
       });
     }
     const g = groups.get(groupKey);
@@ -424,7 +503,7 @@ function renderResults(items, query) {
       g.bestPrice = i.fiyatNum;
     }
     
-    if (!g.imgUrl && hasValidImg) g.imgUrl = i.imgUrl;
+    if (!g.imgUrl && hasValidImg) g.imgUrl = normalizedImgUrl;
     
     // İsim temizleme: En kısa olanı (en jenerik olanı) seç
     if (i.ad.length < g.originalName.length) {
@@ -468,13 +547,7 @@ function renderVariantSelectionLayer(groups, query, allItems) {
     const priceText = hasPrice ? `₺${g.bestPrice.toFixed(2)}'den başlayan` : 'Stokta yok';
     
     card.innerHTML = `
-      <div class="v-list-img">
-        ${g.imgUrl ? `<img src="${g.imgUrl}" alt="">` : `
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-          </svg>
-        `}
-      </div>
+      <div class="v-list-img">${buildVariantImageMarkup(g.imgUrl)}</div>
       <div class="v-list-content">
         <div class="variant-card-title">${g.originalName}</div>
         <div class="variant-card-meta">
@@ -529,13 +602,10 @@ function renderDetailResults(items, query) {
   document.getElementById('productCount').textContent = 'Toplam ' + items.length + ' Teklif Bulundu';
 
   const imgEl = document.getElementById('productImg');
-  const invalidImageKeywords = ['yok', 'no-image', 'noimage', 'default', 'c=.png'];
   const preferredDepotOrder = ['Selçuk Ecza', 'Sentez B2B', 'Nevzat Ecza', 'Anadolu İtriyat', 'Alliance Healthcare', 'Anadolu Pharma'];
-  const imgCandidates = items.filter(i => {
-    if (!i.imgUrl || i.imgUrl.trim() === '') return false;
-    const lower = String(i.imgUrl).toLowerCase();
-    return !invalidImageKeywords.some(k => lower.includes(k));
-  });
+  const imgCandidates = items
+    .map((item) => ({ ...item, resolvedImgUrl: normalizeImageUrl(item.imgUrl, item.depotUrl) }))
+    .filter((item) => item.resolvedImgUrl && isUsableImageUrl(item.resolvedImgUrl));
   imgCandidates.sort((a, b) => {
     let indexA = preferredDepotOrder.indexOf(a.depot);
     let indexB = preferredDepotOrder.indexOf(b.depot);
@@ -543,14 +613,21 @@ function renderDetailResults(items, query) {
     if (indexB === -1) indexB = 99;
     return indexA - indexB;
   });
-  const firstValidImg = imgCandidates.length > 0 ? imgCandidates[0].imgUrl : null;
+  const firstValidImg = imgCandidates.length > 0 ? imgCandidates[0].resolvedImgUrl : null;
 
   const imgFallback = document.getElementById('productImgFallback');
   if (firstValidImg) {
+    imgEl.onerror = () => {
+      imgEl.style.display = 'none';
+      imgFallback.style.display = 'block';
+      imgEl.removeAttribute('src');
+    };
     imgEl.src = firstValidImg;
     imgEl.style.display = 'block';
     imgFallback.style.display = 'none';
   } else {
+    imgEl.onerror = null;
+    imgEl.removeAttribute('src');
     imgEl.style.display = 'none';
     imgFallback.style.display = 'block';
   }
@@ -669,14 +746,16 @@ function getSearchIdentity(items, query) {
   };
 }
 
-function getPlannerOption(items, qty) {
+function getPlannerOption(items, qty, { useMf = false } = {}) {
   const safeQty = Math.max(parseInt(qty, 10) || 1, 1);
-  const options = calcMfOptions(items, safeQty);
-  if (options.length > 0) {
+  const options = useMf ? calcMfOptions(items, safeQty) : [];
+  if (useMf && options.length > 0) {
     return { qty: safeQty, option: options[0] };
   }
 
-  const bestItem = items.find(i => i.fiyatNum > 0) || items[0];
+  const bestItem = items
+    .filter(i => i.fiyatNum > 0)
+    .sort((a, b) => a.fiyatNum - b.fiyatNum)[0] || items[0];
   if (!bestItem) return null;
 
   return {
@@ -693,6 +772,7 @@ function getPlannerOption(items, qty) {
       effectiveUnit: bestItem.fiyatNum || 0,
       unitPrice: bestItem.fiyatNum || 0,
       ad: bestItem.ad,
+      planningMode: 'unit',
     },
   };
 }
@@ -702,17 +782,26 @@ function updateSearchActionMeta() {
   if (!meta || !currentDetailItems.length) return;
 
   const qty = _scActiveQty || 1;
-  const planned = getPlannerOption(currentDetailItems, qty);
+  const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
+  const planned = getPlannerOption(currentDetailItems, qty, { useMf: hasExplicitQty });
   if (!planned || !planned.option) {
     meta.textContent = 'Bu urunu siparis planina veya sabit ihtiyac listenize ekleyin.';
     return;
   }
 
-  const priceText = planned.option.totalCost > 0
-    ? 'Tahmini toplam: ₺' + planned.option.totalCost.toFixed(2).replace('.', ',')
+  if (!hasExplicitQty) {
+    const unitText = planned.option.effectiveUnit > 0
+      ? 'Birim fiyat: ₺' + planned.option.effectiveUnit.toFixed(2).replace('.', ',')
+      : 'Fiyat bilgisi bekleniyor';
+    meta.textContent = `Hizli oneride depo: ${planned.option.depot}. ${unitText}.`;
+    return;
+  }
+
+  const totalText = planned.option.totalCost > 0
+    ? 'Toplam odeme: ₺' + planned.option.totalCost.toFixed(2).replace('.', ',')
     : 'Fiyat bilgisi bekleniyor';
 
-  meta.textContent = `${planned.qty} adet icin onerilen depo: ${planned.option.depot}. ${priceText}.`;
+  meta.textContent = `${planned.qty} birim icin onerilen depo: ${planned.option.depot}. ${totalText}.`;
 }
 
 function renderSearchActionPanel(items, query) {
@@ -1428,13 +1517,15 @@ function addCurrentToOrderPlan() {
   if (!currentDetailItems.length) return;
 
   const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
-  const planned = getPlannerOption(currentDetailItems, _scActiveQty || 1);
+  const useMfPlanning = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
+  const planned = getPlannerOption(currentDetailItems, _scActiveQty || 1, { useMf: useMfPlanning });
   if (!planned || !planned.option) return;
 
   const plan = getOrderPlan();
   const existingIndex = plan.findIndex(item => item.key === identity.key && item.depot === planned.option.depot);
   const nextQty = planned.qty + (existingIndex >= 0 ? (plan[existingIndex].desiredQty || 0) : 0);
-  const recomputed = getPlannerOption(currentDetailItems, nextQty);
+  const shouldUseMf = useMfPlanning || (existingIndex >= 0 && plan[existingIndex].planningMode === 'mf');
+  const recomputed = getPlannerOption(currentDetailItems, nextQty, { useMf: shouldUseMf });
   if (!recomputed || !recomputed.option) return;
 
   const nextItem = {
@@ -1451,6 +1542,7 @@ function addCurrentToOrderPlan() {
     receiveQty: recomputed.option.receiveQty,
     totalCost: recomputed.option.totalCost,
     effectiveUnit: recomputed.option.effectiveUnit,
+    planningMode: shouldUseMf ? 'mf' : 'unit',
     updatedAt: new Date().toISOString(),
   };
 
@@ -1510,13 +1602,110 @@ function openSavedProduct(item) {
   openHistorySearch(item.name || item.query, item.barcode || '');
 }
 
+function openOrderPlanDetail() {
+  showPage('order-plan');
+}
+
+function renderOrderPlanDetail() {
+  const container = document.getElementById('orderPlanDetailContainer');
+  if (!container) return;
+
+  const plan = getOrderPlan();
+  if (!plan.length) {
+    container.innerHTML = `
+      <section class="ops-card plan-detail-shell">
+        <div class="ops-empty">
+          <strong>Aktif siparis plani bos</strong>
+          <span>Arama sonucundan urun eklediginizde bu ekranda depo ve kalem detaylarini goreceksiniz.</span>
+        </div>
+      </section>
+    `;
+    return;
+  }
+
+  const totalCost = plan.reduce((sum, item) => sum + (item.totalCost || 0), 0);
+  const depots = Array.from(new Set(plan.map(item => item.depot).filter(Boolean)));
+
+  container.innerHTML = `
+    <section class="ops-card plan-detail-shell">
+      <div class="plan-detail-summary">
+        <div class="plan-detail-stat">
+          <span>Kalem</span>
+          <strong>${plan.length}</strong>
+        </div>
+        <div class="plan-detail-stat">
+          <span>Toplam Depo</span>
+          <strong>${depots.length}</strong>
+        </div>
+        <div class="plan-detail-stat plan-detail-stat-accent">
+          <span>Plan Toplami</span>
+          <strong>₺${totalCost.toFixed(2).replace('.', ',')}</strong>
+        </div>
+      </div>
+      <div class="plan-detail-list">
+        ${plan.map(item => `
+          <article class="plan-detail-item">
+            <div class="plan-detail-head">
+              <div>
+                <h3>${esc(item.name)}</h3>
+                <div class="plan-detail-tags">
+                  <span>${esc(item.depot)}</span>
+                  <span>${esc(item.desiredQty)} hedef</span>
+                  <span>${esc(item.receiveQty)} teslim</span>
+                  <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
+                </div>
+              </div>
+              <div class="plan-detail-price">₺${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
+            </div>
+            <div class="plan-detail-grid">
+              <div class="plan-detail-cell">
+                <span>Birim Maliyet</span>
+                <strong>${item.effectiveUnit > 0 ? '₺' + item.effectiveUnit.toFixed(2).replace('.', ',') : 'Bilinmiyor'}</strong>
+              </div>
+              <div class="plan-detail-cell">
+                <span>Barkod</span>
+                <strong>${item.barcode ? esc(item.barcode) : 'Yok'}</strong>
+              </div>
+              <div class="plan-detail-cell">
+                <span>Secilen Depo</span>
+                <strong>${esc(item.depot)}</strong>
+              </div>
+            </div>
+            <div class="plan-detail-actions">
+              <button class="btn btn-outline" type="button" data-plan-detail-open="${esc(item.key)}" data-plan-detail-depot="${esc(item.depot)}">Urunu Ac</button>
+              ${item.depotUrl ? `<button class="btn btn-primary" type="button" data-plan-detail-depot-open="${esc(item.key)}" data-plan-detail-depot-name="${esc(item.depot)}">Depoya Git</button>` : ''}
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+
+  container.querySelectorAll('[data-plan-detail-open]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const item = plan.find((entry) => entry.key === btn.dataset.planDetailOpen && entry.depot === btn.dataset.planDetailDepot);
+      if (item) openSavedProduct(item);
+    });
+  });
+
+  container.querySelectorAll('[data-plan-detail-depot-open]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const item = plan.find((entry) => entry.key === btn.dataset.planDetailDepotOpen && entry.depot === btn.dataset.planDetailDepotName);
+      if (item?.depotUrl) copyAndOpenDepot(item.depotUrl, item.depotId || '');
+    });
+  });
+}
+
 function renderHomeOrderPlan() {
   const container = document.getElementById('orderPlanContainer');
   const clearBtn = document.getElementById('clearOrderPlanBtn');
-  if (!container || !clearBtn) return;
+  const inspectBtn = document.getElementById('openOrderPlanBtn');
+  if (!container || !clearBtn || !inspectBtn) return;
 
   const plan = getOrderPlan();
+  saveOrderPlan(plan);
   clearBtn.style.display = plan.length ? 'inline-flex' : 'none';
+  inspectBtn.style.display = plan.length ? 'inline-flex' : 'none';
 
   if (!plan.length) {
     container.innerHTML = `
@@ -1536,7 +1725,7 @@ function renderHomeOrderPlan() {
         <strong>${plan.length}</strong>
       </div>
       <div class="plan-summary-stat">
-        <span>Tahmini Toplam</span>
+        <span>Plan Toplami</span>
         <strong>₺${totalCost.toFixed(2).replace('.', ',')}</strong>
       </div>
     </div>
@@ -1550,8 +1739,8 @@ function renderHomeOrderPlan() {
             </div>
             <div class="plan-item-meta">
               <span>${esc(item.depot)}</span>
-              <span>${esc(item.desiredQty)} hedef / ${esc(item.receiveQty)} gelen</span>
-              <span>${item.mfStr ? esc(item.mfStr) : 'Kampanyasiz'}</span>
+              <span>${esc(item.desiredQty)} hedef / ${esc(item.receiveQty)} teslim</span>
+              <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
             </div>
           </button>
           <button class="plan-item-remove" data-plan-remove="${esc(item.key)}" data-plan-remove-depot="${esc(item.depot)}" type="button">Sil</button>
@@ -1561,10 +1750,7 @@ function renderHomeOrderPlan() {
   `;
 
   container.querySelectorAll('[data-plan-open]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = plan.find(entry => entry.key === btn.dataset.planOpen && entry.depot === btn.dataset.planDepot);
-      if (item) openSavedProduct(item);
-    });
+    btn.addEventListener('click', openOrderPlanDetail);
   });
 
   container.querySelectorAll('[data-plan-remove]').forEach(btn => {
@@ -1574,10 +1760,14 @@ function renderHomeOrderPlan() {
 
 function renderRoutineList() {
   const container = document.getElementById('routineListContainer');
-  if (!container) return;
+  const routineCard = document.getElementById('routineCard');
+  const orderPlanCard = document.getElementById('orderPlanCard');
+  if (!container || !routineCard || !orderPlanCard) return;
 
   const routines = getRoutineList();
   if (!routines.length) {
+    routineCard.classList.add('ops-card-hidden');
+    orderPlanCard.classList.add('ops-card-wide');
     container.innerHTML = `
       <div class="ops-empty">
         <strong>Sabit ihtiyac listeniz bos</strong>
@@ -1586,6 +1776,9 @@ function renderRoutineList() {
     `;
     return;
   }
+
+  routineCard.classList.remove('ops-card-hidden');
+  orderPlanCard.classList.remove('ops-card-wide');
 
   container.innerHTML = `
     <div class="routine-list">
@@ -1719,10 +1912,12 @@ function renderHomeDashboard() {
   const addPlanBtn = document.getElementById('addToPlanBtn');
   const addRoutineBtn = document.getElementById('addToRoutineBtn');
   const clearPlanBtn = document.getElementById('clearOrderPlanBtn');
+  const openPlanBtn = document.getElementById('openOrderPlanBtn');
 
   addPlanBtn?.addEventListener('click', addCurrentToOrderPlan);
   addRoutineBtn?.addEventListener('click', addCurrentToRoutineList);
   clearPlanBtn?.addEventListener('click', clearOrderPlan);
+  openPlanBtn?.addEventListener('click', openOrderPlanDetail);
 })();
 
 // ── History ──

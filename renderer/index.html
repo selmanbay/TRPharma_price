@@ -89,19 +89,22 @@
           <div id="depotCards" class="depot-cards"></div>
 
           <div class="ops-grid">
-            <section class="ops-card">
+            <section class="ops-card" id="orderPlanCard">
               <div class="ops-card-head">
                 <div>
                   <div class="ops-card-eyebrow">Siparis</div>
                   <h3>Aktif Siparis Plani</h3>
                   <p>Secilen urunleri hedef adetleriyle burada toparlayin.</p>
                 </div>
-                <button class="home-history-link" id="clearOrderPlanBtn" type="button">Plani Temizle</button>
+                <div class="ops-card-actions">
+                  <button class="home-history-link" id="openOrderPlanBtn" type="button">Plani Incele</button>
+                  <button class="home-history-link" id="clearOrderPlanBtn" type="button">Plani Temizle</button>
+                </div>
               </div>
               <div id="orderPlanContainer" class="ops-card-body"></div>
             </section>
 
-            <section class="ops-card">
+            <section class="ops-card" id="routineCard">
               <div class="ops-card-head">
                 <div>
                   <div class="ops-card-eyebrow">Rutin</div>
@@ -323,6 +326,20 @@
         </div>
         <div id="historyInsightsContainer"></div>
         <div id="historyContainer"></div>
+      </div>
+    </div>
+
+    <div id="page-order-plan" class="page">
+      <div class="settings-page-inner">
+        <button class="back-btn" onclick="showPage('home')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Ana Sayfa
+        </button>
+        <div class="settings-header">
+          <h2>Aktif Siparis Plani</h2>
+          <p>Planinizdaki urunleri, secilen depolari ve maliyetleri detayli inceleyin.</p>
+        </div>
+        <div id="orderPlanDetailContainer"></div>
       </div>
     </div>
 

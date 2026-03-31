@@ -693,12 +693,26 @@ body {
   -webkit-backdrop-filter: blur(16px);
 }
 
+.ops-card-wide {
+  grid-column: 1 / -1;
+}
+
+.ops-card-hidden {
+  display: none;
+}
+
 .ops-card-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
+}
+
+.ops-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .ops-card-eyebrow {
@@ -778,6 +792,7 @@ body {
   font-size: 20px;
   color: var(--text-0);
   letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
 .plan-list,
@@ -834,9 +849,10 @@ body {
 
 .plan-item-price {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--best);
+  white-space: nowrap;
 }
 
 .plan-item-meta,
@@ -903,6 +919,135 @@ body {
 .history-insight-add {
   min-width: 150px;
   justify-content: center;
+}
+
+.plan-detail-shell {
+  padding: 28px;
+}
+
+.plan-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.plan-detail-stat {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 100%);
+  border: 1px solid var(--border);
+}
+
+.plan-detail-stat span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+
+.plan-detail-stat strong {
+  display: block;
+  font-size: 26px;
+  color: var(--text-0);
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-detail-stat-accent {
+  background: linear-gradient(135deg, #fff6f6 0%, #fff 100%);
+  border-color: #ffd6d6;
+}
+
+.plan-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.plan-detail-item {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(252,249,249,0.96) 100%);
+}
+
+.plan-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.plan-detail-head h3 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--text-0);
+  letter-spacing: -0.03em;
+}
+
+.plan-detail-price {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--best);
+  white-space: nowrap;
+}
+
+.plan-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.plan-detail-tags span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.plan-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plan-detail-cell {
+  padding: 14px 15px;
+  border-radius: 16px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+}
+
+.plan-detail-cell span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.plan-detail-cell strong {
+  display: block;
+  font-size: 15px;
+  color: var(--text-0);
+  line-height: 1.35;
+}
+
+.plan-detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .history-insights-card {
@@ -1268,6 +1413,15 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.v-list-img-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
 }
 
 .v-list-img svg {
@@ -2323,6 +2477,7 @@ body {
   .ops-grid { grid-template-columns: 1fr; }
   .ops-card { padding: 18px; border-radius: 18px; }
   .ops-card-head { flex-direction: column; align-items: stretch; }
+  .ops-card-actions { flex-direction: column; align-items: stretch; }
   .plan-summary { grid-template-columns: 1fr; }
   .plan-item,
   .routine-item,
@@ -2346,6 +2501,11 @@ body {
   .sc-trigger { align-self: flex-start; }
   .sc-flyout-inner { padding: 16px 14px 14px; }
   .form-row { flex-direction: column; }
+  .plan-detail-summary,
+  .plan-detail-grid { grid-template-columns: 1fr; }
+  .plan-detail-head,
+  .plan-detail-actions { flex-direction: column; }
+  .plan-detail-price { font-size: 24px; }
   .depot-cards { gap: 8px; }
   .depot-card { padding: 10px 14px; }
   .depot-panel { width: 85%; min-width: unset; }

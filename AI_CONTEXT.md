@@ -53,6 +53,13 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 - **Doğrulama**: `scripts/validate-release.js` tag ve version eşleşmesini kontrol eder.
 - **Zamanlama**: Packaged uygulama açılıştan kısa süre sonra ve 6 saatte bir update kontrolü yapar.
 
+### UI Fix Release (2.0.3)
+- **Sürüm**: `package.json` sürümü `2.0.3` oldu.
+- **Sipariş Planı**: Varsayılan öneri akışı kampanyayı zorla uygulamaz; MF sadece kullanıcı miktar girdiğinde devreye girer.
+- **Plan Detayı**: `Aktif Siparis Plani` artık ayrı bir inceleme ekranına açılır; ilaçlar, depolar ve maliyetler detaylı görünür.
+- **Görsel Düzeltmesi**: Göreli `imgUrl` dönen depolar için görsel URL'leri `depotUrl` ile tamamlanır; kırık resimde fallback ikon gösterilir.
+- **UI Düzeni**: Boş sabit liste ana sayfada gizlenir, sipariş planı kartı tek başına genişler.
+
 ### Stok Filtreleme (server.js satır 203)
 - **Filtre**: `if (!product.stokVar || (product.stok === 0 && product.stokGosterilsin)) continue;`
 - **stokGosterilsin=false** → stok miktarı bilgisi olmayan depolar için (Sentez, Anadolu İtriyat, Alliance). Bu flag `false` olunca stok=0 filtresi devre dışı kalır.
