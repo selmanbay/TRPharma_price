@@ -72,7 +72,7 @@ function showPage(name) {
 
     if (name === 'home') {
       document.getElementById('homeSearchInput').focus();
-      renderHomeHistory();
+      renderHomeDashboard();
     }
     if (name === 'search') document.getElementById('searchInput').focus();
     if (name === 'settings') renderSettings();
@@ -189,6 +189,51 @@ function parseQRCode(input) {
 // ── Search ──
 let selectedBarcode = null;
 let selectedVariant = null;
+let currentDetailItems = [];
+let currentDetailQuery = '';
+
+const STORAGE_KEYS = {
+  orderPlan: 'eczane.orderPlan.v1',
+  routineList: 'eczane.routineList.v1',
+};
+
+function readStoredJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed == null ? fallback : parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredJson(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getOrderPlan() {
+  return readStoredJson(STORAGE_KEYS.orderPlan, []);
+}
+
+function saveOrderPlan(items) {
+  writeStoredJson(STORAGE_KEYS.orderPlan, items);
+}
+
+function getRoutineList() {
+  return readStoredJson(STORAGE_KEYS.routineList, []);
+}
+
+function saveRoutineList(items) {
+  writeStoredJson(STORAGE_KEYS.routineList, items);
+}
+
+function slugifyName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 function normalizeDrugName(name) {
   if (!name) return 'Bilinmeyen İlaç Formu';
@@ -268,10 +313,13 @@ async function doSearch() {
   document.getElementById('variantSelectionLayer').style.display = 'none';
   document.getElementById('productCard').style.display = 'none';
   document.getElementById('bestPriceCard').style.display = 'none';
+  document.getElementById('searchActionPanel').style.display = 'none';
   document.getElementById('otherDepots').style.display = 'none';
   document.getElementById('stockCalcPanel').classList.remove('open');
   document.getElementById('stockCalcTrigger').style.display = 'none';
   document.getElementById('stockCalcTrigger').classList.remove('open');
+  currentDetailItems = [];
+  currentDetailQuery = '';
 
   activeDepots.forEach(depot => {
     fetch(`${API_BASE}/api/search-depot?q=${encodeURIComponent(query)}&depotId=${depot.id}`)
@@ -458,6 +506,8 @@ function renderVariantSelectionLayer(groups, query, allItems) {
 
 function renderDetailResults(items, query) {
   if (!items || items.length === 0) return;
+  currentDetailItems = items.slice();
+  currentDetailQuery = query;
 
   const productCard = document.getElementById('productCard');
   const bestPriceCard = document.getElementById('bestPriceCard');
@@ -596,6 +646,7 @@ function renderDetailResults(items, query) {
   }
 
   initStockCalc(items);
+  renderSearchActionPanel(items, query);
 }
 
 function esc(str) {
@@ -603,6 +654,72 @@ function esc(str) {
   const d = document.createElement('div');
   d.textContent = String(str);
   return d.innerHTML;
+}
+
+function getSearchIdentity(items, query) {
+  const firstItem = items?.[0] || {};
+  const barcode = /^\d{8,}$/.test(query)
+    ? query
+    : (firstItem.barkod || extractBarcode(firstItem.kodu) || '');
+  return {
+    name: firstItem.ad || query,
+    barcode,
+    query: barcode || query || firstItem.ad || '',
+    key: barcode || slugifyName(firstItem.ad || query || 'urun'),
+  };
+}
+
+function getPlannerOption(items, qty) {
+  const safeQty = Math.max(parseInt(qty, 10) || 1, 1);
+  const options = calcMfOptions(items, safeQty);
+  if (options.length > 0) {
+    return { qty: safeQty, option: options[0] };
+  }
+
+  const bestItem = items.find(i => i.fiyatNum > 0) || items[0];
+  if (!bestItem) return null;
+
+  return {
+    qty: safeQty,
+    option: {
+      depot: bestItem.depot,
+      depotId: bestItem.depotId,
+      depotUrl: bestItem.depotUrl,
+      mf: null,
+      mfStr: bestItem.malFazlasi || '',
+      orderQty: safeQty,
+      receiveQty: safeQty,
+      totalCost: safeQty * (bestItem.fiyatNum || 0),
+      effectiveUnit: bestItem.fiyatNum || 0,
+      unitPrice: bestItem.fiyatNum || 0,
+      ad: bestItem.ad,
+    },
+  };
+}
+
+function updateSearchActionMeta() {
+  const meta = document.getElementById('searchActionMeta');
+  if (!meta || !currentDetailItems.length) return;
+
+  const qty = _scActiveQty || 1;
+  const planned = getPlannerOption(currentDetailItems, qty);
+  if (!planned || !planned.option) {
+    meta.textContent = 'Bu urunu siparis planina veya sabit ihtiyac listenize ekleyin.';
+    return;
+  }
+
+  const priceText = planned.option.totalCost > 0
+    ? 'Tahmini toplam: ₺' + planned.option.totalCost.toFixed(2).replace('.', ',')
+    : 'Fiyat bilgisi bekleniyor';
+
+  meta.textContent = `${planned.qty} adet icin onerilen depo: ${planned.option.depot}. ${priceText}.`;
+}
+
+function renderSearchActionPanel(items, query) {
+  const panel = document.getElementById('searchActionPanel');
+  if (!panel) return;
+  panel.style.display = items && items.length ? 'flex' : 'none';
+  updateSearchActionMeta();
 }
 
 // ═══════════════════════════════════════════════════
@@ -785,6 +902,7 @@ function initStockCalc(items) {
   input.value = '';
   results.innerHTML = '';
   buildMfChips(items);
+  updateSearchActionMeta();
 }
 
 function toggleStockCalc() {
@@ -820,9 +938,11 @@ function toggleStockCalc() {
       });
       renderStockCalc(_scItems, val);
     } else {
+      _scActiveQty = null;
       document.getElementById('stockCalcResults').innerHTML = '';
       document.querySelectorAll('.mf-chip').forEach(c => c.classList.remove('active'));
     }
+    updateSearchActionMeta();
   }
 
   trigger.addEventListener('click', toggleStockCalc);
@@ -1303,6 +1423,308 @@ async function deleteDepot(depotId) {
   } catch (e) {}
 }
 
+// ── Eczaci workflow helpers ──
+function addCurrentToOrderPlan() {
+  if (!currentDetailItems.length) return;
+
+  const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
+  const planned = getPlannerOption(currentDetailItems, _scActiveQty || 1);
+  if (!planned || !planned.option) return;
+
+  const plan = getOrderPlan();
+  const existingIndex = plan.findIndex(item => item.key === identity.key && item.depot === planned.option.depot);
+  const nextQty = planned.qty + (existingIndex >= 0 ? (plan[existingIndex].desiredQty || 0) : 0);
+  const recomputed = getPlannerOption(currentDetailItems, nextQty);
+  if (!recomputed || !recomputed.option) return;
+
+  const nextItem = {
+    key: identity.key,
+    name: identity.name,
+    barcode: identity.barcode || '',
+    query: identity.query,
+    desiredQty: nextQty,
+    depot: recomputed.option.depot,
+    depotId: recomputed.option.depotId || '',
+    depotUrl: recomputed.option.depotUrl || '',
+    mfStr: recomputed.option.mfStr || '',
+    orderQty: recomputed.option.orderQty,
+    receiveQty: recomputed.option.receiveQty,
+    totalCost: recomputed.option.totalCost,
+    effectiveUnit: recomputed.option.effectiveUnit,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (existingIndex >= 0) {
+    plan[existingIndex] = nextItem;
+  } else {
+    plan.unshift(nextItem);
+  }
+
+  saveOrderPlan(plan);
+  renderHomeOrderPlan();
+  showToast(`${identity.name} siparis planina eklendi`);
+}
+
+function removeOrderPlanItem(key, depot) {
+  const next = getOrderPlan().filter(item => !(item.key === key && item.depot === depot));
+  saveOrderPlan(next);
+  renderHomeOrderPlan();
+}
+
+function clearOrderPlan() {
+  saveOrderPlan([]);
+  renderHomeOrderPlan();
+}
+
+function addCurrentToRoutineList() {
+  if (!currentDetailItems.length) return;
+
+  const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
+  const list = getRoutineList();
+  const exists = list.some(item => item.key === identity.key);
+  if (exists) {
+    showToast('Bu urun zaten sabit listede');
+    return;
+  }
+
+  list.unshift({
+    key: identity.key,
+    name: identity.name,
+    barcode: identity.barcode || '',
+    query: identity.query,
+    addedAt: new Date().toISOString(),
+  });
+
+  saveRoutineList(list.slice(0, 24));
+  renderRoutineList();
+  showToast(`${identity.name} sabit listeye eklendi`);
+}
+
+function removeRoutineItem(key) {
+  const next = getRoutineList().filter(item => item.key !== key);
+  saveRoutineList(next);
+  renderRoutineList();
+}
+
+function openSavedProduct(item) {
+  openHistorySearch(item.name || item.query, item.barcode || '');
+}
+
+function renderHomeOrderPlan() {
+  const container = document.getElementById('orderPlanContainer');
+  const clearBtn = document.getElementById('clearOrderPlanBtn');
+  if (!container || !clearBtn) return;
+
+  const plan = getOrderPlan();
+  clearBtn.style.display = plan.length ? 'inline-flex' : 'none';
+
+  if (!plan.length) {
+    container.innerHTML = `
+      <div class="ops-empty">
+        <strong>Henuz aktif siparis plani yok</strong>
+        <span>Arama sonucundan "Siparis Planina Ekle" dediginizde burada toplam maliyet ve depo onerisi gorunecek.</span>
+      </div>
+    `;
+    return;
+  }
+
+  const totalCost = plan.reduce((sum, item) => sum + (item.totalCost || 0), 0);
+  container.innerHTML = `
+    <div class="plan-summary">
+      <div class="plan-summary-stat">
+        <span>Kalem</span>
+        <strong>${plan.length}</strong>
+      </div>
+      <div class="plan-summary-stat">
+        <span>Tahmini Toplam</span>
+        <strong>₺${totalCost.toFixed(2).replace('.', ',')}</strong>
+      </div>
+    </div>
+    <div class="plan-list">
+      ${plan.map(item => `
+        <div class="plan-item">
+          <button class="plan-item-main" data-plan-open="${esc(item.key)}" data-plan-depot="${esc(item.depot)}">
+            <div class="plan-item-top">
+              <div class="plan-item-name">${esc(item.name)}</div>
+              <div class="plan-item-price">₺${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
+            </div>
+            <div class="plan-item-meta">
+              <span>${esc(item.depot)}</span>
+              <span>${esc(item.desiredQty)} hedef / ${esc(item.receiveQty)} gelen</span>
+              <span>${item.mfStr ? esc(item.mfStr) : 'Kampanyasiz'}</span>
+            </div>
+          </button>
+          <button class="plan-item-remove" data-plan-remove="${esc(item.key)}" data-plan-remove-depot="${esc(item.depot)}" type="button">Sil</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  container.querySelectorAll('[data-plan-open]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = plan.find(entry => entry.key === btn.dataset.planOpen && entry.depot === btn.dataset.planDepot);
+      if (item) openSavedProduct(item);
+    });
+  });
+
+  container.querySelectorAll('[data-plan-remove]').forEach(btn => {
+    btn.addEventListener('click', () => removeOrderPlanItem(btn.dataset.planRemove, btn.dataset.planRemoveDepot));
+  });
+}
+
+function renderRoutineList() {
+  const container = document.getElementById('routineListContainer');
+  if (!container) return;
+
+  const routines = getRoutineList();
+  if (!routines.length) {
+    container.innerHTML = `
+      <div class="ops-empty">
+        <strong>Sabit ihtiyac listeniz bos</strong>
+        <span>Duzenli aldiginiz urunleri sonuc ekranindan bu listeye ekleyebilirsiniz.</span>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="routine-list">
+      ${routines.map(item => `
+        <div class="routine-item">
+          <button class="routine-item-main" data-routine-open="${esc(item.key)}">
+            <span class="routine-item-name">${esc(item.name)}</span>
+            ${item.barcode ? `<span class="routine-item-code">${esc(item.barcode)}</span>` : ''}
+          </button>
+          <button class="plan-item-remove" data-routine-remove="${esc(item.key)}" type="button">Sil</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  container.querySelectorAll('[data-routine-open]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = routines.find(entry => entry.key === btn.dataset.routineOpen);
+      if (item) openSavedProduct(item);
+    });
+  });
+
+  container.querySelectorAll('[data-routine-remove]').forEach(btn => {
+    btn.addEventListener('click', () => removeRoutineItem(btn.dataset.routineRemove));
+  });
+}
+
+function buildHistoryInsights(history) {
+  const map = new Map();
+
+  (history || []).forEach(entry => {
+    const key = entry.barkod || slugifyName(entry.ilac || '');
+    if (!key) return;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        name: entry.ilac,
+        barcode: entry.barkod || '',
+        count: 0,
+        lastSeen: entry.tarih,
+      });
+    }
+    const insight = map.get(key);
+    insight.count++;
+    if (new Date(entry.tarih) > new Date(insight.lastSeen)) {
+      insight.lastSeen = entry.tarih;
+      insight.name = entry.ilac;
+      insight.barcode = entry.barkod || insight.barcode;
+    }
+  });
+
+  return Array.from(map.values())
+    .filter(item => item.count > 1)
+    .sort((a, b) => b.count - a.count || new Date(b.lastSeen) - new Date(a.lastSeen))
+    .slice(0, 6);
+}
+
+function renderHistoryInsights(history) {
+  const container = document.getElementById('historyInsightsContainer');
+  if (!container) return;
+
+  const insights = buildHistoryInsights(history);
+  if (!insights.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const routines = getRoutineList();
+  container.innerHTML = `
+    <section class="ops-card history-insights-card">
+      <div class="ops-card-head">
+        <div>
+          <div class="ops-card-eyebrow">Adaylar</div>
+          <h3>Rutin Alim Adaylari</h3>
+          <p>Gecmiste tekrar tekrar aradiginiz urunleri buradan hizlica sabitleyin.</p>
+        </div>
+      </div>
+      <div class="history-insights-list">
+        ${insights.map(item => {
+          const exists = routines.some(routine => routine.key === item.key);
+          return `
+            <div class="history-insight-item">
+              <button class="history-insight-main" data-insight-open="${esc(item.key)}">
+                <strong>${esc(item.name)}</strong>
+                <span>${esc(item.count)} kez arandi${item.barcode ? ` · ${esc(item.barcode)}` : ''}</span>
+              </button>
+              ${exists
+                ? '<span class="history-insight-badge">Sabit listede</span>'
+                : `<button class="btn btn-outline history-insight-add" data-insight-add="${esc(item.key)}" type="button">Sabit Listeye Ekle</button>`}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+
+  container.querySelectorAll('[data-insight-open]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = insights.find(entry => entry.key === btn.dataset.insightOpen);
+      if (item) openSavedProduct(item);
+    });
+  });
+
+  container.querySelectorAll('[data-insight-add]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = insights.find(entry => entry.key === btn.dataset.insightAdd);
+      if (!item) return;
+      const list = getRoutineList();
+      list.unshift({
+        key: item.key,
+        name: item.name,
+        barcode: item.barcode || '',
+        query: item.barcode || item.name,
+        addedAt: new Date().toISOString(),
+      });
+      saveRoutineList(list.slice(0, 24));
+      renderRoutineList();
+      renderHistoryInsights(history);
+      showToast(`${item.name} sabit listeye eklendi`);
+    });
+  });
+}
+
+function renderHomeDashboard() {
+  renderHomeOrderPlan();
+  renderRoutineList();
+  renderHomeHistory();
+}
+
+(function setupWorkflowActions() {
+  const addPlanBtn = document.getElementById('addToPlanBtn');
+  const addRoutineBtn = document.getElementById('addToRoutineBtn');
+  const clearPlanBtn = document.getElementById('clearOrderPlanBtn');
+
+  addPlanBtn?.addEventListener('click', addCurrentToOrderPlan);
+  addRoutineBtn?.addEventListener('click', addCurrentToRoutineList);
+  clearPlanBtn?.addEventListener('click', clearOrderPlan);
+})();
+
 // ── History ──
 function saveHistory(items, query) {
   if (!items || items.length === 0) return;
@@ -1323,7 +1745,7 @@ function saveHistory(items, query) {
       enUcuz: { depot: bestItem.depot, fiyat: bestItem.fiyat },
     }),
   }).then(() => {
-    renderHomeHistory();
+    renderHomeDashboard();
     if (currentPage === 'history') renderHistory();
   }).catch(() => {});
 }
@@ -1424,6 +1846,7 @@ async function renderHistory() {
 
   try {
     const history = await fetchHistory(100);
+    renderHistoryInsights(history);
 
     if (!history || history.length === 0) {
       container.innerHTML = '<div class="status-msg">Henüz arama geçmişi yok.</div>';
@@ -1478,14 +1901,16 @@ async function renderHistory() {
       btn.addEventListener('click', () => deleteHistory(btn.dataset.historyId));
     });
   } catch (err) {
+    const insights = document.getElementById('historyInsightsContainer');
+    if (insights) insights.innerHTML = '';
     container.innerHTML = '<div class="status-msg error">Geçmiş yüklenemedi: ' + esc(err.message) + '</div>';
   }
 }
 
 async function deleteHistory(id) {
   await fetch(API_BASE + '/api/history/' + id, { method: 'DELETE' });
-  renderHomeHistory();
+  renderHomeDashboard();
   renderHistory();
 }
 
-renderHomeHistory();
+renderHomeDashboard();

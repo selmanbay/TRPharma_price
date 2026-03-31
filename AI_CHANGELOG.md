@@ -1,15 +1,57 @@
 # AI_CHANGELOG — Makine Okunabilir Değişiklik Günlüğü
 
-> **DIKKAT AI ASISTANI (ATTENTION ALL AI AGENTS):** 
-> Bu dosya sistemdeki kod değişikliklerinin tarihçesini en hızlı ve maliyetsiz (least token usage) şekilde okuyabilmeniz için özel olarak **"Makine Formatında" (Machine-Readable)** tasarlanmıştır. 
-> 
-> - Tüm geçmişi okumana gerek yoktur. 
-> - Eğer en son projenin ne durumda bırakıldığını anlamak istiyorsan sadece `@LATEST_CHANGE` bloğuna odaklan. 
+> **DIKKAT AI ASISTANI (ATTENTION ALL AI AGENTS):**
+> Bu dosya sistemdeki kod değişikliklerinin tarihçesini en hızlı ve maliyetsiz (least token usage) şekilde okuyabilmeniz için özel olarak **"Makine Formatında" (Machine-Readable)** tasarlanmıştır.
+>
+> - Tüm geçmişi okumana gerek yoktur.
+> - Eğer en son projenin ne durumda bırakıldığını anlamak istiyorsan sadece `@LATEST_CHANGE` bloğuna odaklan.
 > - Yeni bir işlem yaptığında ESKİ `@LATEST_CHANGE` tag'ini `@ARCHIVED_CHANGE` olarak değiştir ve kendi yaptığın işlemi en tepeye `@LATEST_CHANGE` formatıyla YENİDEN EKLE.
 
 ---
 
 ### @LATEST_CHANGE
+**TIMESTAMP:** 2026-03-31T10:05:00
+**SESSION:** Pharmacist Workflow Layer
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `renderer/index.html` | Ana sayfaya `Aktif Sipariş Planı` ve `Sabit İhtiyaç Listesi` kartları, sonuç ekranına aksiyon paneli, history ekranına `Rutin Alım Adayları` alanı eklendi.
+- `renderer/scripts/app.js` | Frontend-only workflow katmanı yazıldı. `localStorage` tabanlı sipariş planı ve sabit ihtiyaç listesi, history insight üretimi ve sonuç ekranından bu akışlara ekleme davranışı eklendi.
+- `renderer/styles/main.css` | Yeni operasyon kartları, sipariş listesi satırları, aksiyon paneli ve history insight alanları stillendi.
+- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
+- `AI_CONTEXT.md` | Eczacı odaklı yeni workflow katmanı proje hafızasına işlendi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** Sipariş planı özeti
+- **ADDED:** Sabit ihtiyaç listesi
+- **ADDED:** History tabanlı rutin alım adayları
+- **NOT:** Fiyat/search/login/depot adapter mantığına dokunulmadı.
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+Bu feature seti tamamen `renderer/` katmanında tutuldu. Sipariş planı ve sabit ihtiyaçlar `localStorage` kullanır. `src/server.js`, `src/depot-manager.js` ve `src/depots/*.js` altındaki fiyat/search/login akışlarına dokunmayın.
+
+---
+
+### @ARCHIVED_CHANGE_009
+**TIMESTAMP:** 2026-03-31T09:10:00
+**SESSION:** Maintenance Guide & Feature Backlog
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `docs/MAINTENANCE_GUIDE.md` | Proje için kalıcı bakım rehberi eklendi. Mimari özet, klasör sorumlulukları, riskli alanlar, test rutini, değişiklik kuralları ve feature backlog yazıldı.
+- `AI_CONTEXT.md` | Yeni bakım rehberi referansı ve önerilen ilk feature (`Fiyat Değişim Takibi`) proje hafızasına işlendi.
+- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** Yeni onboarding ve bakım dokümanı.
+- **ADDED:** Öncelikli feature backlog ve sıralı öneri listesi.
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+Bakım veya feature geliştirme öncesi önce `docs/MAINTENANCE_GUIDE.md` ve ardından `AI_CONTEXT.md` okunmalı. İlk tavsiye edilen feature, mevcut barkod ve history altyapısı üzerine kurulacak `Fiyat Değişim Takibi` özelliğidir.
+
+---
+
+### @ARCHIVED_CHANGE_008
 **TIMESTAMP:** 2026-03-30T10:05:00
 **SESSION:** Alliance Net Price (124,76) & QR Stability Fix
 **AGENT:** Antigravity
@@ -41,7 +83,7 @@ Alliance'ta barkod araması yaparken `SelectedClass: "3"` PARAMETRESİ MECBURİD
 - `src/depots/selcuk.js` & `nevzat.js` | Arama sonuçlarında gelmeyen barkodlar için otomatik detay sayfasına gitme (scrape) ve barkod enjekte etme özelliği eklendi.
 
 **[ADDED/REMOVED]**
-- **ADDED:** Cross-Depot Barcode Sync: Bir depoda olan barkodun, aynı isimli başka bir deponun barkodsuz ürününe "Entity ID" olarak atanması sağlandı. 
+- **ADDED:** Cross-Depot Barcode Sync: Bir depoda olan barkodun, aynı isimli başka bir deponun barkodsuz ürününe "Entity ID" olarak atanması sağlandı.
 - **ADDED:** 1.5s Gathering Delay: Asenkron veri akışında görsel stabilite sağlandı.
 
 **[CRITICAL_WARNINGS_FOR_NEXT_AI]**
@@ -95,7 +137,7 @@ Proje artık versiyon kontrolündedir. Config'e veri kaydederken şifre gibi has
 
 **[ADDED/REMOVED]**
 - **REMOVED:** Monolithic file logic, duplicate frontend contexts.
-- **ADDED:** Directories `_archive`, `_backups`, `docs` for cleaning up. 
+- **ADDED:** Directories `_archive`, `_backups`, `docs` for cleaning up.
 
 **[CRITICAL_WARNINGS_FOR_NEXT_AI]**
 Sistem şu an tam randımanlı Electron/Web unified (tekil) mimarisiyle çalışmaktadır. Yeni özellik geliştirmeden önce mutlaka Chrome (`localhost:3000`) üzerinden UI/Backend testi yapınız.
@@ -109,5 +151,5 @@ Sistem şu an tam randımanlı Electron/Web unified (tekil) mimarisiyle çalış
 
 **[MODIFIED_FILES]**
 - Tüm `public/` klasör öğeleri `renderer/` içine klonlandı.
-- `main.js` native titlebar ve IPC Handler'ları eklendi.
+- `main.js` native titlebar ve IPC Handler'lar eklendi.
 - `renderer/scripts/app.js` arasına MF (Mal Fazlası) uçuş butonu arayüzü eklendi.

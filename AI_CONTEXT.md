@@ -1,4 +1,4 @@
-# AI_CONTEXT — Eczane App Proje Hafızası
+# AI_CONTEXT â€” Eczane App Proje Hafızası
 
 > Bu dosya AI asistanlar arası bilgi aktarımı için kullanılır.
 > Her değişiklik sonrası güncellenmelidir.
@@ -30,7 +30,18 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 - **Kural**: Electron Migrasyonundan sonra ortaya çıkan çoklu frontend sorunu (public vs renderer çakışması) giderilmiştir. Projenin BİR TEK backend'i ve BİR TEK arayüz dizini (`renderer/`) vardır.
 - **Node.js Localhost**: `src/server.js` artık statik dosyaları eski `public/` yerine güncel UI dizini olan `renderer/` klasöründen sunar (`app.use(express.static('renderer'))`).
 - **Electron Main**: `main.js`, Electron penceresini `file://` adresinden değil, direkt `http://localhost:3000` adresinden yükler (`mainWindow.loadURL('http://localhost:3000')`).
-- **Amaç**: Electron.js Masaüstü versiyonu ile Chrome (Web) versiyonu tamamen **aynı** kod tabanını okur ve UI/Backend arasında hiçbir kod tekrarı / uyuşmazlık bulunmaz. Eski web frontend klasörü `public_old` olarak isimlendirilmiş ve kullanımdan kaldırılmıştır. Eski klasörleri dikkate almayınız!
+- **Amaç**: Electron.js Masaüstü versiyonu ile Chrome (Web) versiyonu tamamen **aynı** kod tabanını okur ve UI/Backend arasında hiçbir kod tekrarı / uyuşmazlık bulunmaz. Eski web frontend klasörü `public_old` olarak isimlendirilmiş ve kullanımdan kaldırılmıştır. Eski klasörleri dikkate almayınız.
+
+### Bakım Rehberi (31 Mart 2026)
+- **Yeni Doküman**: `docs/MAINTENANCE_GUIDE.md` eklendi.
+- **Amaç**: Yeni geliştirici veya AI ajanı için hızlı onboard, riskli alanlar, test rutini ve önerilen feature backlog'unu tek yerde toplamak.
+- **İlk Önerilen Feature**: Barkod bazlı `Fiyat Değişim Takibi`.
+
+### Eczacı Workflow Layer (31 Mart 2026)
+- **Durum**: Kullanıcı talebiyle fiyat değişim takibi beklemeye alındı.
+- **Yeni Güvenli Özellikler**: Frontend-only `Sipariş Planı`, `Sabit İhtiyaç Listesi` ve history tabanlı `Rutin Alım Adayları` eklendi.
+- **Kural**: Bu feature seti uygulanırken fiyat/search/login/depot adapter mantığına dokunulmadı; yalnızca `renderer/` katmanında çalışıldı.
+- **Veri Saklama**: Sipariş planı ve sabit ihtiyaçlar tarayıcı `localStorage` içinde tutulur. Backend config veya depo session verisine bağlanmaz.
 
 ### Stok Filtreleme (server.js satır 203)
 - **Filtre**: `if (!product.stokVar || (product.stok === 0 && product.stokGosterilsin)) continue;`
@@ -75,7 +86,7 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
     3. `CalculateItemTotals`: Çekilen kampanya ve ürün verisiyle deponun hesaplama motoruna gidilerek **`GrossTotal` (124,76)** alanı yakalanır.
   - **Kritik Payload**: `{ ItemString: <rawBase64>, OfferString: <offer base64>, Quantity: 1, OfferChanged: true }`. **NOT:** Quantity `Number` olmalıdır, `String` olursa hata verir.
   - Fallback: Tüm aşamalar fail olursa orijinal arama fiyatı korunur.
-- **Doğru olan depolar**: Anadolu İtriyat ✅, Anadolu Pharma ✅, Sentez ✅ — değişiklik yok
+- **Doğru olan depolar**: Anadolu İtriyat, Anadolu Pharma, Sentez — değişiklik yok
 - **Fallback**: Hesaplama hatası olursa orijinal fiyat korunur (graceful)
 - **Performans**: Her depo için +10 paralel API çağrısı (~500ms ek süre)
 
@@ -100,6 +111,12 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 ### Depot Browser Panel
 - WebView (`partition="persist:depot"`) ile depo sitelerine erişim
 - Cookie injection main process'ten IPC ile yapılır (`inject-depot-cookies`)
+
+### Eczacı Odaklı Yeni UI Katmanları
+- **Sipariş Planı**: Ana sayfada aktif plan kartı vardır. Kullanıcı sonuç ekranından ürünü hedef adet ile plana ekler, plan tahmini toplam maliyet ve önerilen depoyu gösterir.
+- **Sabit İhtiyaç Listesi**: Sonuç ekranından ürünler sabit listeye alınabilir; ana sayfadan tek tıkla yeniden aranabilir.
+- **Rutin Alım Adayları**: History ekranında tekrar edilen ürünler analiz edilerek sabit listeye ekleme önerisi verilir.
+- **Sınır**: Bu katman yalnızca mevcut arama sonuçlarını yeniden kullanır; yeni depo çağrısı, login akışı veya fiyat hesaplama servisi eklemez.
 
 ### Sayfa Geçişleri
 - CSS animasyonları: `page-enter`, `page-exit`, `page-enter-home`, `page-exit-home`
@@ -141,6 +158,8 @@ eczane-app/
 ├── package.json               # Electron + Express deps, build config
 ├── config.json                # ⚠️ DOKUNMA — Depo credentials
 ├── AI_CONTEXT.md              # ← Bu dosya (AI hafızası)
+├── docs/
+│   └── MAINTENANCE_GUIDE.md   # Bakım rehberi + feature backlog
 ├── src/
 │   ├── server.js              # ⚠️ Express API (port 3000)
 │   ├── depot-manager.js       # ⚠️ Depo orchestrator
@@ -169,9 +188,9 @@ eczane-app/
 
 ## Son Güncelleme
 
-**Tarih**: 30 Mart 2026
-**Session**: UX Dev: Variant Selection Layer & Barcode-Driven Entity Model
-**Plan**: Barkod odaklı tekil ürün (Entity) tasarımı ve stabilite (Gathering delay) iyileştirmesi.
+**Tarih**: 31 Mart 2026
+**Session**: Pharmacist Workflow Layer
+**Plan**: Search/login/fiyat mantığını dondurarak sipariş planı, sabit ihtiyaçlar ve history içgörüleri eklemek.
 
 ---
 
@@ -184,12 +203,12 @@ Tekil (Unified) Mimariye geçtiğimiz için, yazılan her kod hem Tarayıcıyı 
    - Tüm UI / API asenkron testleri (Network Console incelemeleri) Web üzerinden doğrulanacak. Zira Web arayüzü bozuksa Electron da bozuk olacaktır.
 
 2. **AŞAMA 2 (Electron ve Native Test):**
-   - Aşama 1'de hatasız çalışan kod, Masaüstü native özelliklerini ve Layout'ları kırmadığını doğrulamak için `npx electron .` ile çalıştırılarak Local Desktop ortamında denenecek. 
+   - Aşama 1'de hatasız çalışan kod, Masaüstü native özelliklerini ve Layout'ları kırmadığını doğrulamak için `npx electron .` ile çalıştırılarak Local Desktop ortamında denenecek.
    - Window IPC (`window.electronAPI`) hataları varsa bu aşamada giderilecek.
 
 3. **AŞAMA 3 (Final Build - Dağıtım):**
    - Sadece ilk iki aşamadan sorunsuz geçmiş ve test edilmiş kodlar `npx electron-builder --win --x64` ile son kullanıcı Setup'ı (exe) haline getirilecek. Doğrudan 3. adıma geçmek kesinlikle **yasaktır**.
 
 ### Kayıt & Dokümantasyon Kuralı (MECBURİ)
-- Projeye dokunan her AI Asistan (Cursor, Claude, Antigravity) yaptığı UFACIK BİR değişikliği veya büyük özellik geliştirmesini **kesinlikle ana dizindeki `AI_CHANGELOG.md` dosyasına not düşecektir.**
-- **Log Formatı Zorunluluğu:** Değişiklik notu düşülürken sadece "UI güncellendi" denmeyecek; TAM OLARAK hangi dosyalara (örn: `renderer/scripts/app.js`), hangi satırlara veya fonksiyonlara müdahale edildiği açıkça `AI_CHANGELOG.md`'nin içindeki `@LATEST_CHANGE` bloğuna makine formatında yazılacaktır. Eski loglar aşağı kaydırılacak, yepyenisi en tepeye oturtulacaktır.
+- Projeye dokunan her AI Asistan (Cursor, Claude, Antigravity) yaptığı ufacık bir değişikliği veya büyük özellik geliştirmesini **kesinlikle ana dizindeki `AI_CHANGELOG.md` dosyasına not düşecektir.**
+- **Log Formatı Zorunluluğu:** Değişiklik notu düşülürken sadece "UI güncellendi" denmeyecek; tam olarak hangi dosyalara müdahale edildiği `AI_CHANGELOG.md` içindeki `@LATEST_CHANGE` bloğuna makine formatında yazılacaktır.

@@ -88,6 +88,31 @@
 
           <div id="depotCards" class="depot-cards"></div>
 
+          <div class="ops-grid">
+            <section class="ops-card">
+              <div class="ops-card-head">
+                <div>
+                  <div class="ops-card-eyebrow">Siparis</div>
+                  <h3>Aktif Siparis Plani</h3>
+                  <p>Secilen urunleri hedef adetleriyle burada toparlayin.</p>
+                </div>
+                <button class="home-history-link" id="clearOrderPlanBtn" type="button">Plani Temizle</button>
+              </div>
+              <div id="orderPlanContainer" class="ops-card-body"></div>
+            </section>
+
+            <section class="ops-card">
+              <div class="ops-card-head">
+                <div>
+                  <div class="ops-card-eyebrow">Rutin</div>
+                  <h3>Sabit Ihtiyac Listesi</h3>
+                  <p>Sik aldiginiz urunleri tek tikla yeniden sorgulayin.</p>
+                </div>
+              </div>
+              <div id="routineListContainer" class="ops-card-body"></div>
+            </section>
+          </div>
+
           <section class="home-history-card">
             <div class="home-history-header">
               <div>
@@ -234,6 +259,17 @@
           </div>
         </div>
 
+        <div id="searchActionPanel" class="action-panel" style="display:none">
+          <div class="action-panel-copy">
+            <div class="action-panel-title">Eczane Is Akisi</div>
+            <div id="searchActionMeta" class="action-panel-meta">Bu urunu siparis planina veya sabit ihtiyac listenize ekleyin.</div>
+          </div>
+          <div class="action-panel-actions">
+            <button id="addToPlanBtn" class="btn btn-primary" type="button">Siparis Planina Ekle</button>
+            <button id="addToRoutineBtn" class="btn btn-outline" type="button">Sabit Listeye Ekle</button>
+          </div>
+        </div>
+
         <!-- Other Depots -->
         <div id="otherDepots" class="others" style="display:none">
           <div class="others-header">
@@ -285,6 +321,7 @@
           <h2>Arama Geçmişi</h2>
           <p>Geçmiş ilaç aramaları ve fiyat karşılaştırmaları.</p>
         </div>
+        <div id="historyInsightsContainer"></div>
         <div id="historyContainer"></div>
       </div>
     </div>
