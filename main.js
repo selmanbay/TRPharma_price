@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, session, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -9,6 +9,7 @@ process.env.ECZANE_OPEN_BROWSER = '0';
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let updateDownloaded = false;
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'icon.png');
@@ -104,6 +105,54 @@ function registerShortcuts() {
     if (mainWindow) {
       mainWindow.show();
       mainWindow.focus();
+    }
+  });
+}
+
+function setupAutoUpdater() {
+  autoUpdater.logger = console;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[updater] Checking for updates...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log(`[updater] Update available: ${info?.version || 'unknown-version'}`);
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log(`[updater] No update available. Current latest: ${info?.version || app.getVersion()}`);
+  });
+
+  autoUpdater.on('error', (error) => {
+    console.error('[updater] Error:', error?.message || error);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = typeof progress?.percent === 'number' ? progress.percent.toFixed(1) : '0.0';
+    console.log(`[updater] Downloading update... ${percent}%`);
+  });
+
+  autoUpdater.on('update-downloaded', async (info) => {
+    updateDownloaded = true;
+    console.log(`[updater] Update downloaded: ${info?.version || 'unknown-version'}`);
+
+    const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const result = await dialog.showMessageBox(targetWindow, {
+      type: 'info',
+      buttons: ['Simdi Yeniden Baslat', 'Daha Sonra'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Guncelleme Hazir',
+      message: `Yeni surum indirildi: ${info?.version || 'yeni surum'}`,
+      detail: 'Guncellemeyi uygulamak icin uygulama yeniden baslatilacak.',
+    });
+
+    if (result.response === 0) {
+      isQuitting = true;
+      autoUpdater.quitAndInstall(false, true);
     }
   });
 }
@@ -214,9 +263,7 @@ ipcMain.handle('inject-depot-cookies', async (_event, depotId, targetUrl) => {
 // ── App Lifecycle ──
 
 app.whenReady().then(() => {
-  // Config updater logging (optional but good for debugging)
-  autoUpdater.logger = console;
-  // Use console instead of electron-log as we don't have that dependency yet
+  setupAutoUpdater();
 
   // Start Express server in the same process
   require('./src/server.js');
@@ -226,11 +273,15 @@ app.whenReady().then(() => {
     createWindow();
     createTray();
     registerShortcuts();
-    
-    // Check for OTA Updates in the background
-    autoUpdater.checkForUpdatesAndNotify().catch(e => {
-        console.error("Update check failed: ", e.message);
-    });
+
+    // Check for OTA updates only in packaged builds.
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdatesAndNotify().catch(e => {
+        console.error('Update check failed: ', e.message);
+      });
+    } else {
+      console.log('[updater] Skipping update check in development mode.');
+    }
   }, 1000);
 });
 

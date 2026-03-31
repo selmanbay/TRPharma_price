@@ -10,6 +10,30 @@
 ---
 
 ### @LATEST_CHANGE
+**TIMESTAMP:** 2026-03-31T10:40:00
+**SESSION:** Updater 2.0.2 Hardening
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `package.json` | Sürüm `2.0.2` yapıldı. `build:win` ve `release:win` scriptleri eklendi.
+- `main.js` | Auto-updater olayları güçlendirildi. Update kontrolü packaged modla sınırlandı, indirme tamamlanınca yeniden başlatma diyaloğu eklendi.
+- `docs/UPDATER_RELEASE_PLAN.md` | Updater zinciri, neden sadece push'un yetmediği ve 2.0.2 release adımları dokümante edildi.
+- `docs/MAINTENANCE_GUIDE.md` | Updater/release rehberine referans eklendi.
+- `AI_CONTEXT.md` | 2.0.2 updater hardening bilgisi proje hafızasına işlendi.
+- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** `release:win` publish scripti
+- **ADDED:** Packaged-only update kontrolü
+- **ADDED:** Update-downloaded restart prompt
+- **ADDED:** 2.0.2 updater release planı
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+Updater'ın çalışması için sadece `git push` yetmez; GitHub release asset'leri gerekir. Testi kurulu `2.0.1` uygulama ile yapmak için önce `2.0.2` release publish edilmelidir.
+
+---
+
+### @ARCHIVED_CHANGE_010
 **TIMESTAMP:** 2026-03-31T10:05:00
 **SESSION:** Pharmacist Workflow Layer
 **AGENT:** Codex

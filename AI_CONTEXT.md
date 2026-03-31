@@ -43,6 +43,13 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 - **Kural**: Bu feature seti uygulanırken fiyat/search/login/depot adapter mantığına dokunulmadı; yalnızca `renderer/` katmanında çalışıldı.
 - **Veri Saklama**: Sipariş planı ve sabit ihtiyaçlar tarayıcı `localStorage` içinde tutulur. Backend config veya depo session verisine bağlanmaz.
 
+### Updater Hardening (2.0.2)
+- **Sürüm**: `package.json` sürümü `2.0.2` oldu.
+- **Release Scriptleri**: `build:win` ve `release:win` scriptleri eklendi.
+- **Runtime Kuralı**: Auto-update kontrolü yalnızca packaged uygulamada yapılır (`app.isPackaged`).
+- **UX**: Update indirildiğinde kullanıcıya "Şimdi Yeniden Başlat / Daha Sonra" penceresi gösterilir.
+- **Doküman**: Release zinciri `docs/UPDATER_RELEASE_PLAN.md` içine yazıldı.
+
 ### Stok Filtreleme (server.js satır 203)
 - **Filtre**: `if (!product.stokVar || (product.stok === 0 && product.stokGosterilsin)) continue;`
 - **stokGosterilsin=false** → stok miktarı bilgisi olmayan depolar için (Sentez, Anadolu İtriyat, Alliance). Bu flag `false` olunca stok=0 filtresi devre dışı kalır.
@@ -189,8 +196,8 @@ eczane-app/
 ## Son Güncelleme
 
 **Tarih**: 31 Mart 2026
-**Session**: Pharmacist Workflow Layer
-**Plan**: Search/login/fiyat mantığını dondurarak sipariş planı, sabit ihtiyaçlar ve history içgörüleri eklemek.
+**Session**: Updater 2.0.2 Hardening
+**Plan**: 2.0.2 için auto-update akışını görünür hale getirmek, packaged-only kontrol eklemek ve release planını belgelemek.
 
 ---
 

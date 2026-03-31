@@ -1,13 +1,15 @@
 {
   "name": "eczane-app",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Eczane İlaç Fiyat Karşılaştırma",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "server": "node src/server.js",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "build:win": "electron-builder --win --x64",
+    "release:win": "electron-builder --win --x64 --publish always"
   },
   "keywords": [],
   "author": "",

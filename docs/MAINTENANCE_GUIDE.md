@@ -318,3 +318,15 @@ Bir degisiklikten sonra kendine su sorulari sor:
 8. AI hafiza dosyalari guncellendi mi
 
 Bu sekiz madde, projede sessiz bozulmalari yakalamak icin en hizli kontroldur.
+
+## 12. Updater ve Release Notu
+
+Electron auto-update akisi icin ek rehber:
+
+- [docs/UPDATER_RELEASE_PLAN.md](D:/personal/eczane-app/docs/UPDATER_RELEASE_PLAN.md)
+
+Kritik ayrim:
+
+- `git push` tek basina updater icin yeterli degildir
+- updater icin GitHub `release` ve release asset'leri gerekir
+- packaged uygulama yeni release metadata dosyasini gorunce update bulur
