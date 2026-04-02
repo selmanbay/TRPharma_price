@@ -159,7 +159,7 @@ class SentezDepot {
     let targetTable = null;
     $('table').each((i, table) => {
       const headers = $(table).find('th').map((j, th) => $(th).text().trim()).get();
-      console.log('[SENTEZ] Table', i, 'headers:', headers);
+      if (process.env.ECZANE_DEBUG === '1') console.log('[SENTEZ] Table', i, 'headers:', headers);
       if (headers.some(h => h.includes('Ürün Adı'))) {
         targetTable = table;
         return false; // break
@@ -180,7 +180,7 @@ class SentezDepot {
       netFiyat: headers.findIndex(h => h.includes('Net Fiyat')),
     };
 
-    console.log('[SENTEZ] colIdx:', colIdx);
+    if (process.env.ECZANE_DEBUG === '1') console.log('[SENTEZ] colIdx:', colIdx);
 
     $(targetTable).find('tbody tr').each((i, tr) => {
       const cells = $(tr).find('td');
@@ -191,7 +191,7 @@ class SentezDepot {
       // Debug: tüm hücreleri logla
       const allTexts = [];
       cells.each((j, td) => allTexts.push($(td).text().replace(/\s+/g, ' ').trim()));
-      console.log('[SENTEZ] ROW cells:', allTexts);
+      if (process.env.ECZANE_DEBUG === '1') console.log('[SENTEZ] ROW cells:', allTexts);
 
       const ad = getText(colIdx.ad);
       if (!ad) return;

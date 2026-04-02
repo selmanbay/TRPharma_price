@@ -324,7 +324,9 @@ class NevzatDepot {
 
   _parseResults(data) {
     const urunler = data.obj?.urunler || [];
-    if (urunler.length > 0) console.log("NEVZAT İLK ÜRÜN TÜM ALANLAR:", JSON.stringify(urunler[0], null, 2));
+    if (process.env.ECZANE_DEBUG === '1' && urunler.length > 0) {
+      console.log("NEVZAT İLK ÜRÜN TÜM ALANLAR:", JSON.stringify(urunler[0], null, 2));
+    }
     const stokGosterilsin = data.obj?.stokGosterilsin ?? false;
     return {
       depot: this.name,

@@ -10,6 +10,26 @@
 ---
 
 ### @LATEST_CHANGE
+**TIMESTAMP:** 2026-03-31T12:35:00
+**SESSION:** Auth Feature Planning Note
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `docs/MAINTENANCE_GUIDE.md` | Sonraki buyuk feature `Login Auth ve Kullanici Oturumu` olacak sekilde backlog ve ilk feature notu guncellendi.
+- `AI_CONTEXT.md` | Auth sonrasi kullaniciya ozel depo verisi yukleme hedefi proje hafizasina eklendi.
+- `AI_CHANGELOG.md` | Son plan/not degisikligi kaydi guncellendi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** Auth feature tanimi
+- **ADDED:** Kullaniciya ozel depo/session verisi gereksinimi notu
+- **REMOVED:** Yok
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+Auth feature'i depo login adaptorlerini degistirmeden, ustte bir kullanici oturumu katmani olarak tasarlanmalidir. Mevcut depo cookie/token/session mantigi korunmali, sadece hangi kullanicinin hangi depo oturumunu gorecegi ayrismalidir.
+
+---
+
+### @ARCHIVED_CHANGE_013
 **TIMESTAMP:** 2026-03-31T12:10:00
 **SESSION:** UI Fix Release 2.0.3
 **AGENT:** Codex
@@ -227,3 +247,23 @@ Sistem şu an tam randımanlı Electron/Web unified (tekil) mimarisiyle çalış
 - Tüm `public/` klasör öğeleri `renderer/` içine klonlandı.
 - `main.js` native titlebar ve IPC Handler'lar eklendi.
 - `renderer/scripts/app.js` arasına MF (Mal Fazlası) uçuş butonu arayüzü eklendi.
+### @LATEST_CHANGE
+**TIMESTAMP:** 2026-03-31T13:10:00
+**SESSION:** Product Design Hardening & Stable UI Pass
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `renderer/styles/main.css` | Arayuz genelinde daha profesyonel, daha sakin ve daha stabil bir tasarim dili uygulandi. Hero alani, dashboard kartlari, sonuc kartlari, en iyi teklif karti, tablo alanlari, ayarlar kartlari, depo paneli, geri butonlari ve aksiyon yuzeyleri daha rafine hale getirildi.
+- `renderer/scripts/app.js` | Gorunen sabit metinler icin daha dogal ve insan yapimi urun dili uygulandi. Bozuk gorunen Turkce metinler runtime seviyesinde duzeltildi. Ana ekran, gecmis, ayarlar, plan, hizli islem ve sonuc ekranlarindaki metinler daha profesyonel hale getirildi.
+- `renderer/index.html` | Hizli islem paneli sadeleştirildi, buton metinleri ve panel dili daha net hale getirildi. Son UX duzenine uygun metinler guncellendi.
+- `main.js` | Electron source calisma sirasinda gorulen `EPIPE / broken pipe` hatalarini sessizce tolere edecek ana surec korumasi eklendi.
+- `src/depots/nevzat.js`, `src/depots/selcuk.js`, `src/depots/sentez.js`, `src/depots/alliance.js`, `src/depots/anadolu-itriyat.js` | Debug loglar production akisinda ana sureci bozmayacak sekilde `ECZANE_DEBUG=1` arkasina alindi.
+
+**[ADDED/REMOVED]**
+- **ADDED:** Daha stabil urun hissi icin yumusatilmis shadow/border sistemi, daha guven veren arka plan katmanlari ve sakinlestirilmis aksiyon stilleri.
+- **ADDED:** Sonuc ekraninda secilen depo ile diger depo tekliflerini birlikte gosterip secili satiri farkli tonla ayiran tablo davranisi.
+- **ADDED:** Barkod tabanli siparis plani kisitlamasi; barkodsuz kalemler plan tarafina alinmiyor.
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+- Bu turdaki ana hedef "buyuk urun sirketi hissi" ve "stabil karar yuzeyi" idi. Yeni UI degisikliklerinde sadece renk oynamak yerine bilgi hiyerarsisi, spacing ve urun dili ayni sistem icinde korunmali.
+- `renderer/index.html` dosyasinda eski bozuk karakterli statik metinler bulunabiliyor; gosterilen son duzgun metinler `renderer/scripts/app.js` icindeki `applyHumanUiCopy()` tarafindan runtime'da duzeltiliyor. Yeni bir genel encoding temizligi yapilacaksa bu katman dikkatlice sadeleştirilmeli.

@@ -256,7 +256,7 @@ class AllianceDepot {
       
       if (res.data?.Result === true && res.data?.Value) {
         const gross = res.data.Value.GrossTotal;
-        console.log(`[ALLIANCE] Calculate success: ${gross}`);
+        if (process.env.ECZANE_DEBUG === '1') console.log(`[ALLIANCE] Calculate success: ${gross}`);
         return { grossTotal: gross };
       }
       console.warn(`[ALLIANCE] Calculate failed: ${res.data?.Message || 'No value'}`);

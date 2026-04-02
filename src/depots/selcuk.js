@@ -206,19 +206,19 @@ class SelcukDepot {
    * Gerçek fiyat hesaplama — IlacFiyatHesapla action'u ile net tutar al
    * Etiket fiyatı değil, iskontolar+KDV dahil eczacının gerçek maliyetini döndürür
    */
-  async calculatePrice(kod, ilacTip, etiketFiyati, satisSekli = 'A6') {
+  async calculatePrice(kod, ilacTip, etiketFiyati, satisSekli = 'A6', miktar = '1') {
     if (!this.cookies) return null;
     try {
       // etiketFiyati Turkish format: "99,93" veya "1.299,93"
       // onerilenFiyat dot format: "99.93" veya "1299.93"
       const onerilenFiyat = etiketFiyati.replace(/\./g, '').replace(',', '.');
-      console.log(`[SELÇUK calculatePrice] kod=${kod} satisSekli=${satisSekli} etiket=${etiketFiyati} onerilen=${onerilenFiyat}`);
+      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK calculatePrice] kod=${kod} satisSekli=${satisSekli} etiket=${etiketFiyati} onerilen=${onerilenFiyat}`);
       const res = await axios.post(
         `${BASE_URL}/Ilac/IlacGetir-ajax.aspx`,
         new URLSearchParams({
           action: 'IlacFiyatHesapla',
           kod: kod,
-          miktar: '1',
+          miktar: String(miktar || '1'),
           satisSekli: satisSekli,
           etiketFiyati: etiketFiyati,
           miad: 'undefined',
@@ -237,12 +237,14 @@ class SelcukDepot {
           timeout: 6000,
         }
       );
-      console.log(`[SELÇUK calculatePrice] response hataId=${res.data.hataId} netTutar=${res.data.obj?.netTutar}`);
+      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK calculatePrice] response hataId=${res.data.hataId} netTutar=${res.data.obj?.netTutar}`);
       if (res.data.hataId === 0 && res.data.obj) {
         return {
           netTutar: res.data.obj.netTutar,
           birimFiyat: res.data.obj.birimFiyat,
           depocuFiyati: res.data.obj.depocuFiyati,
+          toplamMiktar: res.data.obj.toplamMiktar,
+          malFazlasi: res.data.obj.malFazlasi,
         };
       }
       return null;
@@ -286,22 +288,26 @@ class SelcukDepot {
       });
 
       // AŞAMA 2: IlacFiyatHesapla — Gerçek net tutar al
-      console.log(`[SELÇUK] Aşama 2: ${topItems.length} ürün için fiyat hesaplama başlıyor...`);
+      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK] Aşama 2: ${topItems.length} ürün için fiyat hesaplama başlıyor...`);
       const pricePromises = topItems.map((item, i) => {
         const detail = details[i];
         const satisSekli = detail?.kampanyalar?.[0]?.satisSekli || 'A6';
-        console.log(`[SELÇUK] item[${i}] kodu=${item.kodu} fiyat=${item.fiyat} satisSekli=${satisSekli} detail=${!!detail}`);
-        return this.calculatePrice(item.kodu, item.ilacTip, item.fiyat, satisSekli)
+        const primaryMf = String(item.malFazlasi || '').match(/(\d+)\s*\+\s*(\d+)/);
+        const miktar = primaryMf ? String(parseInt(primaryMf[1], 10) + parseInt(primaryMf[2], 10)) : '1';
+        if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK] item[${i}] kodu=${item.kodu} fiyat=${item.fiyat} satisSekli=${satisSekli} detail=${!!detail}`);
+        return this.calculatePrice(item.kodu, item.ilacTip, item.fiyat, satisSekli, miktar)
           .catch(() => null);
       });
       const prices = await Promise.all(pricePromises);
 
       // Net Tutar ile fiyat güncelle
       prices.forEach((p, i) => {
-        if (p && p.netTutar > 0) {
+        if (p && Number(p.birimFiyat) > 0) {
           topItems[i].etiketFiyat = topItems[i].fiyat; // Orijinali sakla
-          topItems[i].fiyatNum = parseFloat(p.netTutar.toFixed(2));
-          topItems[i].fiyat = p.netTutar.toFixed(2).replace('.', ',');
+          topItems[i].fiyatNum = parseFloat(Number(p.birimFiyat).toFixed(2));
+          topItems[i].fiyat = Number(p.birimFiyat).toFixed(2).replace('.', ',');
+          topItems[i].selcukNetTutar = Number(p.netTutar || 0);
+          topItems[i].selcukToplamMiktar = Number(p.toplamMiktar || 0);
         }
       });
 
@@ -310,7 +316,7 @@ class SelcukDepot {
 
   _parseResults(data) {
     const urunler = data.obj?.urunler || [];
-    console.log("SELCUK URUNLER: ", urunler);
+    if (process.env.ECZANE_DEBUG === '1') console.log("SELCUK URUNLER: ", urunler);
     const stokGosterilsin = data.obj?.stokGosterilsin ?? false;
     return {
       depot: this.name,

@@ -8,6 +8,7 @@ const AnadoluItriyatDepot = require('./depots/anadolu-itriyat');
 const AllianceDepot = require('./depots/alliance');
 const SentezDepot = require('./depots/sentez');
 const fs = require('fs');
+const { ensureConfigFile, ensureDataFile, getConfigPath, getDataFilePath } = require('./config-store');
 
 const app = express();
 const PORT = 3000;
@@ -18,8 +19,9 @@ app.use(express.static(path.join(__dirname, '..', 'renderer')));
 // Depot manager
 const manager = new DepotManager();
 
+const CONFIG_PATH = getConfigPath();
+
 // Config dosyası yolu
-const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
 // Depot sınıfları haritası
 const DEPOT_CLASSES = {
@@ -302,6 +304,7 @@ app.delete('/api/config/depot/:depotId', (req, res) => {
 
 // Login test — credential'larla login denemesi yap
 app.post('/api/test-login', async (req, res) => {
+  try {
   const { depotId, credentials } = req.body;
 
   const depotInfo = DEPOT_CLASSES[depotId];
@@ -311,8 +314,13 @@ app.post('/api/test-login', async (req, res) => {
 
   // Şifre girilmediyse config'deki mevcut şifreyi kullan
   const config = loadConfig();
-  const savedCreds = config.depots?.[depotId]?.credentials || {};
-  const mergedCredentials = { ...savedCreds, ...credentials };
+  const runtimeDepot = manager.depots.find(d => d.name === depotInfo.name);
+  const runtimeCreds = runtimeDepot?.credentials || {};
+  const savedCreds = {
+    ...runtimeCreds,
+    ...(config.depots?.[depotId]?.credentials || {}),
+  };
+  const mergedCredentials = { ...savedCreds, ...(credentials || {}) };
   // Boş string olan alanlar için saved değeri kullan
   for (const key of Object.keys(mergedCredentials)) {
     if (!mergedCredentials[key] && savedCreds[key]) {
@@ -320,7 +328,31 @@ app.post('/api/test-login', async (req, res) => {
     }
   }
 
+  const hasProvidedCredentials = Object.values(credentials || {}).some(value => String(value || '').trim());
+  if (!hasProvidedCredentials && runtimeDepot) {
+    const runtimeResult = await runtimeDepot.login();
+    if (runtimeResult.success) {
+      if (!config.depots) config.depots = {};
+      config.depots[depotId] = {
+        credentials: runtimeDepot.credentials || savedCreds,
+        cookies: runtimeDepot.cookies || config.depots?.[depotId]?.cookies || null,
+        token: runtimeDepot.token || config.depots?.[depotId]?.token || null,
+        ciSession: runtimeDepot.ciSession || config.depots?.[depotId]?.ciSession || null,
+      };
+      saveConfig(config);
+      initDepots();
+    }
+    return res.json(runtimeResult);
+  }
+
   const depot = new depotInfo.cls(mergedCredentials);
+  const savedDepotConfig = config.depots?.[depotId] || {};
+  if (depotInfo.authType === 'cookie' && savedDepotConfig.cookies && typeof depot.setCookies === 'function') {
+    depot.setCookies(savedDepotConfig.cookies);
+  }
+  if (depotInfo.authType === 'token' && savedDepotConfig.token && typeof depot.setToken === 'function') {
+    depot.setToken(savedDepotConfig.token, savedDepotConfig.ciSession || null);
+  }
   const result = await depot.login();
 
   if (result.success) {
@@ -336,21 +368,24 @@ app.post('/api/test-login', async (req, res) => {
   }
 
   res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: `Login testi hatasi: ${err.message}` });
+  }
 });
 
 // ── Alım Geçmişi ──
-const HISTORY_PATH = path.join(__dirname, '..', 'data', 'history.json');
+const HISTORY_PATH = getDataFilePath('history.json');
 
 function loadHistory() {
   try {
+    ensureDataFile('history.json', []);
     if (fs.existsSync(HISTORY_PATH)) return JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf-8'));
   } catch (e) {}
   return [];
 }
 
 function saveHistory(data) {
-  const dir = path.dirname(HISTORY_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  ensureDataFile('history.json', []);
   fs.writeFileSync(HISTORY_PATH, JSON.stringify(data, null, 2));
 }
 
@@ -387,6 +422,9 @@ app.delete('/api/history/:id', (req, res) => {
 });
 
 // ── Start ──
+ensureConfigFile();
+console.log(`[config] Server config: ${CONFIG_PATH}`);
+console.log(`[history] Server history: ${HISTORY_PATH}`);
 initDepots();
 app.listen(PORT, () => {
   console.log(`\n  Eczane App çalışıyor: http://localhost:${PORT}\n`);

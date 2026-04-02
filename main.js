@@ -2,9 +2,39 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, se
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const { ensureConfigFile, getConfigPath, loadConfig } = require('./src/config-store');
 
 // Prevent Express from opening a browser window
 process.env.ECZANE_OPEN_BROWSER = '0';
+
+function isBrokenPipeError(error) {
+  return error && (error.code === 'EPIPE' || String(error.message || '').includes('broken pipe'));
+}
+
+if (process.stdout) {
+  process.stdout.on('error', (error) => {
+    if (!isBrokenPipeError(error)) throw error;
+  });
+}
+
+if (process.stderr) {
+  process.stderr.on('error', (error) => {
+    if (!isBrokenPipeError(error)) throw error;
+  });
+}
+
+process.on('uncaughtException', (error) => {
+  if (isBrokenPipeError(error)) {
+    return;
+  }
+
+  try {
+    dialog.showErrorBox(
+      'Error',
+      `A JavaScript error occurred in the main process\n\nUncaught Exception:\n${error?.stack || error?.message || String(error)}`
+    );
+  } catch (_) {}
+});
 
 let mainWindow = null;
 let tray = null;
@@ -16,7 +46,6 @@ let updateCheckInterval = null;
 const UPDATE_CHECK_DELAY_MS = 15 * 1000;
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-const CONFIG_PATH = path.join(__dirname, 'config.json');
 const ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'icon.png');
 const TRAY_ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'tray-icon.png');
 
@@ -213,7 +242,7 @@ ipcMain.handle('is-maximized', () => {
 
 ipcMain.handle('get-depot-cookies', (_event, depotId) => {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    const config = loadConfig();
     const depot = config.depots?.[depotId];
     if (!depot) return null;
     return {
@@ -228,7 +257,7 @@ ipcMain.handle('get-depot-cookies', (_event, depotId) => {
 
 ipcMain.handle('inject-depot-cookies', async (_event, depotId, targetUrl) => {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+    const config = loadConfig();
     const depot = config.depots?.[depotId];
     if (!depot) return { success: false, reason: 'no-depot' };
 
@@ -293,6 +322,10 @@ ipcMain.handle('inject-depot-cookies', async (_event, depotId, targetUrl) => {
 // ── App Lifecycle ──
 
 app.whenReady().then(() => {
+  process.env.ECZANE_CONFIG_PATH = getConfigPath();
+  ensureConfigFile();
+  console.log(`[config] Electron config: ${process.env.ECZANE_CONFIG_PATH}`);
+
   setupAutoUpdater();
 
   // Start Express server in the same process

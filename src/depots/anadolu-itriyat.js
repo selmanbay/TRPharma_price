@@ -191,7 +191,7 @@ class AnadoluItriyatDepot {
     // Response is a flat JSON array (NOT wrapped in {Items:[...]})
     // [{Id, Code, Name, Price2Str, PriceNetWithVatStr, AvailabilityText, EczKarOran, Overage, Manufacturer, PicturePath}]
     const items = Array.isArray(data) ? data : (data.Items || data.items || []);
-    if (items.length > 0) console.log("AI RAW ITEM:", items[0]);
+    if (process.env.ECZANE_DEBUG === '1' && items.length > 0) console.log("AI RAW ITEM:", items[0]);
 
     return {
       depot: this.name,

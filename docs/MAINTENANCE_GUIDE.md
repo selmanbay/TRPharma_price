@@ -219,7 +219,20 @@ Buyuk davranis degisikligi varsa bu rehber de guncellenmeli.
 
 Asagidaki feature'lar bu projeye hem teknik hem is degeri acisindan mantikli gorunuyor.
 
-### 8.1 Fiyat Degisim Takibi
+### 8.1 Login Auth ve Kullanici Oturumu
+
+Kullanici uygulamaya once kendi hesabi ile girsin. Depo durumlari, kayitli entegrasyonlar ve kullaniciya ozel ayarlar auth sonrasinda yuklensin.
+
+- Uygulama acilisinda login kontrolu
+- Kullaniciya ozel depo credential ve cookie/token baglama
+- Kullaniciya ozel history, siparis plani ve sabit liste
+- Auth olmadan depo bilgi kartlari ve arama akisinin sinirlanmasi
+- Session expire olursa yeniden login ekranina dusme
+
+Neden degerli:
+Bu uygulamadaki depo oturumlari ve ayarlar kullaniciya ozeldir. Auth katmani olmadan ayni cihazda farkli eczane veya farkli kullanici profilleri guvenli sekilde ayrisamaz.
+
+### 8.2 Fiyat Degisim Takibi
 
 Kullanici bir urunu "izlemeye" alabilsin.
 
@@ -231,7 +244,7 @@ Kullanici bir urunu "izlemeye" alabilsin.
 Neden degerli:
 Gunluk tekrar aranan ilaclarda sadece anlik degil trend bilgisi de saglar.
 
-### 8.2 Sepet Simulasyonu
+### 8.3 Sepet Simulasyonu
 
 Birden fazla ilaci tek seferde girip toplam maliyet hesabi yapilabilsin.
 
@@ -278,31 +291,31 @@ Kullaniciya hangi veriye daha cok guvenmesi gerektigini anlatir.
 
 ## 9. Onerilen Ilk Feature
 
-Ilk sirada uygulanmasi en mantikli feature: `Fiyat Degisim Takibi`
+Ilk sirada uygulanmasi en mantikli feature: `Login Auth ve Kullanici Oturumu`
 
 Sebep:
 
-- Mevcut `history.json` altyapisini kullanarak baslamak kolay
-- Barkod merkezli veri modeli ile uyumlu
-- UI'ya yuksek deger katar
-- Depo adaptorlerinin mantigini cok bozmadan gelistirilebilir
+- Depo sessionlari ve ayarlar zaten kullaniciya ozel oldugu icin mimari ihtiyac haline geldi
+- Sonraki tum feature'larin kullanici bazli veri modelini saglamlastirir
+- Ayni cihazda farkli kullanici veya eczane profili ayrisini mumkun kilar
+- Yetkisiz durumda depo verisi gostermeme kuralini netlestirir
 
 Minimum uygulanabilir kapsami:
 
-1. Urun detayinda "Takibe Al" butonu
-2. Barkod bazli local watchlist
-3. Son 10 fiyat snapshot'i
-4. Son aramaya gore fiyat artti / azaldi etiketi
+1. Login ekranı ve session kontrolu
+2. Kullaniciya ozel config/history baglama
+3. Auth olmadan arama ve depo kartlarini kilitleme
+4. Session expire oldugunda yeniden login akisi
 
 ## 10. Onerilen Sonraki Isler
 
 Sirali backlog onerisi:
 
-1. Fiyat Degisim Takibi
-2. Sepet Simulasyonu
-3. Veri Kalitesi Rozetleri
-4. Kritik Stok Uyarisi
-5. Favori Depo Onceliklendirme
+1. Login Auth ve Kullanici Oturumu
+2. Fiyat Degisim Takibi
+3. Sepet Simulasyonu
+4. Veri Kalitesi Rozetleri
+5. Kritik Stok Uyarisi
 
 ## 11. Kisa Operasyon Check-list
 

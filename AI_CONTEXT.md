@@ -60,6 +60,11 @@ Eczane İlaç Fiyat Karşılaştırma uygulaması. 6 farklı ecza deposundan (Se
 - **Görsel Düzeltmesi**: Göreli `imgUrl` dönen depolar için görsel URL'leri `depotUrl` ile tamamlanır; kırık resimde fallback ikon gösterilir.
 - **UI Düzeni**: Boş sabit liste ana sayfada gizlenir, sipariş planı kartı tek başına genişler.
 
+### Sonraki Buyuk Feature: Login Auth
+- **Hedef**: Depo durumlari, credential baglantilari, history ve kullaniciya ozel is akislari auth sonrasinda yuklensin.
+- **Gerekce**: Depo sessionlari ve ayarlar kullaniciya ozeldir; auth katmani olmadan bunlari guvenli ayirmak zor.
+- **Beklenen Etki**: Auth olmadan depo kartlari ve arama akisi kisitlanacak, session expire oldugunda yeniden login akisi gerekecek.
+
 ### Stok Filtreleme (server.js satır 203)
 - **Filtre**: `if (!product.stokVar || (product.stok === 0 && product.stokGosterilsin)) continue;`
 - **stokGosterilsin=false** → stok miktarı bilgisi olmayan depolar için (Sentez, Anadolu İtriyat, Alliance). Bu flag `false` olunca stok=0 filtresi devre dışı kalır.
@@ -229,3 +234,21 @@ Tekil (Unified) Mimariye geçtiğimiz için, yazılan her kod hem Tarayıcıyı 
 ### Kayıt & Dokümantasyon Kuralı (MECBURİ)
 - Projeye dokunan her AI Asistan (Cursor, Claude, Antigravity) yaptığı ufacık bir değişikliği veya büyük özellik geliştirmesini **kesinlikle ana dizindeki `AI_CHANGELOG.md` dosyasına not düşecektir.**
 - **Log Formatı Zorunluluğu:** Değişiklik notu düşülürken sadece "UI güncellendi" denmeyecek; tam olarak hangi dosyalara müdahale edildiği `AI_CHANGELOG.md` içindeki `@LATEST_CHANGE` bloğuna makine formatında yazılacaktır.
+## 2026-03-31 Product Design Note
+
+- Uygulama icin yeni hedef yalnizca "guzel gorunen" bir arayuz degil; buyuk urun sirketleri seviyesinde daha stabil, daha guven veren, daha akici bir desktop urun hissidir.
+- Son tasarim turunda hero, dashboard, sonuc kartlari, depo teklif tablosu, ayarlar kartlari ve sag panel yuzeyi daha rafine hale getirildi.
+- Mevcut tasarim stratejisi:
+  - daha az gorsel gurultu
+  - daha net karar hiyerarsisi
+  - daha sakin aksiyonlar
+  - daha premium ama abartisiz kart ve yuzeyler
+  - eczaci icin hizli karar alma hissi
+- Kritik teknik not:
+  - `renderer/index.html` icinde eski bozuk Turkce metinler kalabiliyor
+  - kullanicinin gordugu metinlerin bir kismi `renderer/scripts/app.js` icindeki `applyHumanUiCopy()` ile runtime'da duzeltiliyor
+  - ileride tam bir encoding temizligi yapilacaksa bu runtime katman yerine kaynak metinler dogrudan temizlenmeli
+- UX notu:
+  - Siparis plani artik barkod merkezli dusunulmeli
+  - arama isimle yapilsa bile sonuc kimligi ve duplicate temizligi barkodla ilerlemeli
+  - secilen en iyi teklif, tablo disina cikarilmak yerine tablo icinde de ayristirilmis olarak gorunmeli

@@ -214,15 +214,24 @@ function writeStoredJson(key, value) {
 }
 
 function getOrderPlan() {
-  return readStoredJson(STORAGE_KEYS.orderPlan, []).map(normalizeOrderPlanItem);
+  return dedupeStoredItems(
+    readStoredJson(STORAGE_KEYS.orderPlan, []).map(normalizeOrderPlanItem).filter(Boolean),
+    (item) => `${item.key}::${item.depot || ''}`
+  );
 }
 
 function saveOrderPlan(items) {
-  writeStoredJson(STORAGE_KEYS.orderPlan, items);
+  writeStoredJson(
+    STORAGE_KEYS.orderPlan,
+    (items || []).map(normalizeOrderPlanItem).filter(Boolean)
+  );
 }
 
 function getRoutineList() {
-  return readStoredJson(STORAGE_KEYS.routineList, []);
+  return dedupeStoredItems(
+    readStoredJson(STORAGE_KEYS.routineList, []).map(normalizeRoutineItem),
+    (item) => item.key
+  );
 }
 
 function saveRoutineList(items) {
@@ -230,8 +239,16 @@ function saveRoutineList(items) {
 }
 
 function normalizeOrderPlanItem(item) {
+  const barcode = String(item?.barcode || '').trim();
+  if (!isBarcodeQuery(barcode)) {
+    return null;
+  }
+
   const nextItem = {
     ...item,
+    key: barcode,
+    barcode,
+    query: barcode,
     desiredQty: Math.max(parseInt(item?.desiredQty, 10) || 1, 1),
     orderQty: Math.max(parseInt(item?.orderQty, 10) || 0, 0),
     receiveQty: Math.max(parseInt(item?.receiveQty, 10) || 0, 0),
@@ -259,6 +276,28 @@ function normalizeOrderPlanItem(item) {
   }
 
   return nextItem;
+}
+
+function normalizeRoutineItem(item) {
+  const barcode = String(item?.barcode || '').trim();
+  return {
+    ...item,
+    key: barcode || String(item?.key || slugifyName(item?.name || item?.query || 'urun')).trim(),
+    barcode,
+    query: String(barcode || item?.query || item?.name || '').trim(),
+  };
+}
+
+function dedupeStoredItems(items, getKey) {
+  const map = new Map();
+  for (const item of items || []) {
+    const key = getKey(item);
+    if (!key) continue;
+    if (!map.has(key)) {
+      map.set(key, item);
+    }
+  }
+  return Array.from(map.values());
 }
 
 function slugifyName(value) {
@@ -325,6 +364,123 @@ function normalizeDrugName(name) {
   n = n.replace(/\b(PED\.|PEDIATRIK|PEDİATRİK)\b/g, 'PED');
   n = n.replace(/\s+/g, ' ').trim();
   return n;
+}
+
+function isBarcodeQuery(value) {
+  return /^\d{13,}$/.test(String(value || '').trim());
+}
+
+function getItemBarcode(item, fallbackQuery = '') {
+  const direct = String(item?.barkod || '').trim();
+  if (direct) return direct;
+
+  const extracted = extractBarcode(item?.kodu);
+  if (extracted) return extracted;
+
+  const parsedQuery = parseQRCode(fallbackQuery);
+  return isBarcodeQuery(parsedQuery) ? parsedQuery : '';
+}
+
+function getBarcodeHints(items, fallbackQuery = '') {
+  const hints = new Map();
+  for (const item of items || []) {
+    const barcode = getItemBarcode(item, fallbackQuery);
+    const nameKey = normalizeDrugName(item?.ad);
+    if (barcode && nameKey && !hints.has(nameKey)) {
+      hints.set(nameKey, barcode);
+    }
+  }
+  return hints;
+}
+
+function resolveItemBarcode(item, barcodeHints, fallbackQuery = '') {
+  return getItemBarcode(item, fallbackQuery) || barcodeHints.get(normalizeDrugName(item?.ad)) || '';
+}
+
+function getItemIdentityKey(item, barcodeHints, fallbackQuery = '') {
+  const barcode = resolveItemBarcode(item, barcodeHints, fallbackQuery);
+  if (barcode) return `BARCODE_${barcode}`;
+  return `NAME_${normalizeDrugName(item?.ad)}`;
+}
+
+function chooseCanonicalProductName(items, fallbackName = '') {
+  const names = (items || [])
+    .map((item) => String(item?.ad || '').trim())
+    .filter(Boolean);
+
+  if (!names.length) {
+    return fallbackName || 'Bilinmeyen Ilac Formu';
+  }
+
+  names.sort((a, b) => a.length - b.length || a.localeCompare(b, 'tr'));
+  return names[0];
+}
+
+function comparePreferredItems(a, b) {
+  const aInStock = a?.stokVar ? 1 : 0;
+  const bInStock = b?.stokVar ? 1 : 0;
+  if (aInStock !== bInStock) return bInStock - aInStock;
+
+  const aHasPrice = a?.fiyatNum > 0 ? 1 : 0;
+  const bHasPrice = b?.fiyatNum > 0 ? 1 : 0;
+  if (aHasPrice !== bHasPrice) return bHasPrice - aHasPrice;
+
+  if (aHasPrice && bHasPrice && a.fiyatNum !== b.fiyatNum) {
+    return a.fiyatNum - b.fiyatNum;
+  }
+
+  const aHasImage = isUsableImageUrl(normalizeImageUrl(a?.imgUrl, a?.depotUrl)) ? 1 : 0;
+  const bHasImage = isUsableImageUrl(normalizeImageUrl(b?.imgUrl, b?.depotUrl)) ? 1 : 0;
+  if (aHasImage !== bHasImage) return bHasImage - aHasImage;
+
+  const aName = String(a?.ad || '');
+  const bName = String(b?.ad || '');
+  return aName.length - bName.length || aName.localeCompare(bName, 'tr');
+}
+
+function dedupeSearchItems(items, query = '') {
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const barcodeHints = getBarcodeHints(items, query);
+  const groups = new Map();
+
+  for (const item of items) {
+    const barcode = resolveItemBarcode(item, barcodeHints, query);
+    const identityKey = barcode ? `BARCODE_${barcode}` : `NAME_${normalizeDrugName(item?.ad)}`;
+    const prepared = {
+      ...item,
+      barkod: barcode || String(item?.barkod || '').trim(),
+    };
+
+    if (!groups.has(identityKey)) {
+      groups.set(identityKey, []);
+    }
+    groups.get(identityKey).push(prepared);
+  }
+
+  const deduped = [];
+  for (const groupItems of groups.values()) {
+    const canonicalName = chooseCanonicalProductName(groupItems, query);
+    const canonicalBarcode = groupItems.find((item) => item.barkod)?.barkod || '';
+    const depotItems = new Map();
+
+    for (const item of groupItems) {
+      const depotKey = `${item.depotId || ''}::${item.depot || ''}`;
+      const prepared = {
+        ...item,
+        ad: canonicalName,
+        barkod: canonicalBarcode || item.barkod || '',
+      };
+      const existing = depotItems.get(depotKey);
+      if (!existing || comparePreferredItems(prepared, existing) < 0) {
+        depotItems.set(depotKey, prepared);
+      }
+    }
+
+    deduped.push(...depotItems.values());
+  }
+
+  return deduped;
 }
 
 let searchStartTime = 0;
@@ -435,10 +591,12 @@ async function doSearch() {
 
 function renderResults(items, query) {
   if (!items || items.length === 0) return;
+  items = dedupeSearchItems(items, query);
 
-  const isBarcode = /^\d{8,}$/.test(query);
+  const isBarcode = isBarcodeQuery(query);
   const now = Date.now();
   const elapsed = now - searchStartTime;
+  const barcodeHints = getBarcodeHints(items, query);
 
   // 1.5 saniye dolmadan sonuç gösterme (Görsel stabilite için)
   if (!isBarcode && selectedVariant === null && elapsed < MIN_GATHER_TIME) {
@@ -447,7 +605,9 @@ function renderResults(items, query) {
 
   if (isBarcode || selectedVariant !== null) {
     // If scanning a barcode or if user already picked a variant, show final details.
-    const filteredItems = isBarcode ? items : items.filter(i => normalizeDrugName(i.ad) === selectedVariant);
+    const filteredItems = isBarcode
+      ? items
+      : items.filter(i => getItemIdentityKey(i, barcodeHints, query) === selectedVariant);
     
     // Switch UI
     document.getElementById('variantSelectionLayer').style.display = 'none';
@@ -460,28 +620,11 @@ function renderResults(items, query) {
 
   // Not a barcode and no variant selected yet: GROUP MODE
   
-  // 1. AŞAMA: İsim -> Barkod haritası çıkar (Bir depoda barkod varsa diğerindeki barkodsuz aynı ismi besleyelim)
-  const nameToBarcode = new Map();
-  items.forEach(i => {
-    const barcode = i.barkod || extractBarcode(i.kodu);
-    const norm = normalizeDrugName(i.ad);
-    if (barcode && !nameToBarcode.has(norm)) {
-      nameToBarcode.set(norm, barcode);
-    }
-  });
-
-  // 2. AŞAMA: Gruplama yap
   const groups = new Map();
   items.forEach(i => {
-    let barcode = i.barkod || extractBarcode(i.kodu);
+    const barcode = resolveItemBarcode(i, barcodeHints, query);
     const normName = normalizeDrugName(i.ad);
-    
-    // Cross-ref: Eğer bu isme ait bir barkod başka bir depoda varsa onu kullan
-    if (!barcode && nameToBarcode.has(normName)) {
-      barcode = nameToBarcode.get(normName);
-    }
-
-    const groupKey = barcode || ("NAME_" + normName);
+    const groupKey = barcode ? `BARCODE_${barcode}` : `NAME_${normName}`;
     const normalizedImgUrl = normalizeImageUrl(i.imgUrl, i.depotUrl);
     const hasValidImg = isUsableImageUrl(normalizedImgUrl);
 
@@ -515,7 +658,7 @@ function renderResults(items, query) {
 
   if (uniqueGroups.length === 1) {
     // Auto-select if only 1 variant exists (or if normalization merged everything into 1)
-    selectedVariant = uniqueGroups[0].normalizedName;
+    selectedVariant = uniqueGroups[0].id;
     document.getElementById('variantSelectionLayer').style.display = 'none';
     renderDetailResults(items, query);
     return;
@@ -568,7 +711,7 @@ function renderVariantSelectionLayer(groups, query, allItems) {
         document.getElementById('searchInput').value = g.barcode;
         doSearch();
       } else {
-        selectedVariant = g.normalizedName;
+        selectedVariant = g.id;
         renderResults(allItems, query);
       }
     };
@@ -579,22 +722,38 @@ function renderVariantSelectionLayer(groups, query, allItems) {
 
 function renderDetailResults(items, query) {
   if (!items || items.length === 0) return;
+  items = dedupeSearchItems(items, query);
   currentDetailItems = items.slice();
   currentDetailQuery = query;
 
   const productCard = document.getElementById('productCard');
   const bestPriceCard = document.getElementById('bestPriceCard');
   const otherDepots = document.getElementById('otherDepots');
+  let otherDepotsTitle = document.getElementById('otherDepotsTitle');
+  if (!otherDepotsTitle && otherDepots) {
+    const header = otherDepots.querySelector('.others-header');
+    if (header) {
+      header.childNodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          node.textContent = '';
+        }
+      });
+      otherDepotsTitle = document.createElement('span');
+      otherDepotsTitle.id = 'otherDepotsTitle';
+      header.appendChild(otherDepotsTitle);
+    }
+  }
   const tbody = document.getElementById('resultsBody');
 
-  const firstName = items[0].ad || query;
+  const firstName = chooseCanonicalProductName(items, query);
   document.getElementById('productName').textContent = firstName;
   const barcodeTag = document.getElementById('productBarcode');
   const barcodeText = document.getElementById('productBarcodeText');
 
-  const isBarcode = /^\d{8,}$/.test(query);
-  if (isBarcode) {
-    barcodeText.textContent = query;
+  const barcodeHints = getBarcodeHints(items, query);
+  const displayBarcode = isBarcodeQuery(query) ? query : resolveItemBarcode(items[0], barcodeHints, query);
+  if (displayBarcode) {
+    barcodeText.textContent = displayBarcode;
     barcodeTag.style.display = 'inline-flex';
   } else {
     barcodeTag.style.display = 'none';
@@ -637,6 +796,7 @@ function renderDetailResults(items, query) {
 
   const bestItem = items.find(i => i.fiyatNum > 0) || items[0];
   document.getElementById('bestDepotName').textContent = bestItem.depot;
+  if (otherDepotsTitle) otherDepotsTitle.textContent = 'DEPO TEKLIFLERI';
   document.getElementById('bestPrice').textContent = '₺' + bestItem.fiyat;
 
   const stockText = bestItem.stokVar
@@ -665,16 +825,19 @@ function renderDetailResults(items, query) {
     bestLinkEl.style.display = 'none';
   }
 
+  updateBestOfferCard(items);
+
   bestPriceCard.style.display = 'block';
   bestPriceCard.classList.add('result-best-enter');
   setTimeout(() => bestPriceCard.classList.remove('result-best-enter'), 500);
 
-  const otherItems = items.filter(i => i !== bestItem);
+  const tableItems = items.slice();
   tbody.innerHTML = '';
-  if (otherItems.length > 0) {
-    otherItems.forEach((item, idx) => {
+  if (tableItems.length > 0) {
+    tableItems.forEach((item, idx) => {
       const tr = document.createElement('tr');
-      tr.className = 'stagger-enter stagger-delay-' + Math.min(idx, 9);
+      const isBestRow = item === bestItem;
+      tr.className = 'stagger-enter stagger-delay-' + Math.min(idx, 9) + (isBestRow ? ' is-best' : '');
       const isInStock = item.stokVar;
       const stockStr = isInStock
         ? (item.stok > 0 && item.stokGosterilsin ? item.stok + ' Adet' : 'Stokta var')
@@ -687,10 +850,11 @@ function renderDetailResults(items, query) {
       tr.innerHTML = `
         <td>
           <div class="depot-name-cell">
-            <div class="depot-icon-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            </div>
+             <div class="depot-icon-sm">
+               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+             </div>
             <span class="depot-name-text">${esc(item.depot)}</span>
+            ${isBestRow ? '<span class="depot-best-pill">Secilen Teklif</span>' : ''}
           </div>
         </td>
         <td>
@@ -702,9 +866,9 @@ function renderDetailResults(items, query) {
         <td>
           <span style="color:var(--accent);font-weight:600;font-size:13px;">${esc(item.malFazlasi)}</span>
         </td>
-        <td class="price-cell">₺${esc(item.fiyat)}</td>
-        <td>${depotBtnHtml}</td>
-      `;
+         <td class="price-cell">₺${esc(item.fiyat)}</td>
+         <td>${depotBtnHtml}</td>
+       `;
 
       const btn = tr.querySelector('.btn-depot-link');
       if (btn) {
@@ -734,15 +898,21 @@ function esc(str) {
 }
 
 function getSearchIdentity(items, query) {
-  const firstItem = items?.[0] || {};
-  const barcode = /^\d{8,}$/.test(query)
+  const normalizedItems = dedupeSearchItems(items || [], query);
+  const firstItem = normalizedItems?.[0] || items?.[0] || {};
+  const barcodeHints = getBarcodeHints(normalizedItems, query);
+  const identityKeys = Array.from(new Set(normalizedItems.map(item => getItemIdentityKey(item, barcodeHints, query))));
+  const barcode = isBarcodeQuery(query)
     ? query
-    : (firstItem.barkod || extractBarcode(firstItem.kodu) || '');
+    : (identityKeys.length === 1 ? resolveItemBarcode(firstItem, barcodeHints, query) : '');
+  const name = identityKeys.length === 1
+    ? chooseCanonicalProductName(normalizedItems, firstItem.ad || query)
+    : (query || firstItem.ad || '');
   return {
-    name: firstItem.ad || query,
+    name,
     barcode,
-    query: barcode || query || firstItem.ad || '',
-    key: barcode || slugifyName(firstItem.ad || query || 'urun'),
+    query: barcode || query || name || '',
+    key: barcode || slugifyName(name || query || 'urun'),
   };
 }
 
@@ -778,8 +948,11 @@ function getPlannerOption(items, qty, { useMf = false } = {}) {
 }
 
 function updateSearchActionMeta() {
-  const meta = document.getElementById('searchActionMeta');
-  if (!meta || !currentDetailItems.length) return;
+  const productEl = document.getElementById('searchActionProduct');
+  if (!productEl || !currentDetailItems.length) return;
+  const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
+  productEl.textContent = identity.name || 'Seçili ürün';
+  return;
 
   const qty = _scActiveQty || 1;
   const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
@@ -809,6 +982,134 @@ function renderSearchActionPanel(items, query) {
   if (!panel) return;
   panel.style.display = items && items.length ? 'flex' : 'none';
   updateSearchActionMeta();
+}
+
+function formatCurrency(value) {
+  return '₺' + Number(value || 0).toFixed(2).replace('.', ',');
+}
+
+function getActiveBestSelection(items) {
+  if (!items || !items.length) return null;
+
+  const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
+  const planned = getPlannerOption(items, _scActiveQty || 1, { useMf: hasExplicitQty });
+  if (!planned || !planned.option) return null;
+
+  const option = planned.option;
+  const baseItem = items.find((item) => item.depot === option.depot) || items[0];
+  return {
+    qty: planned.qty,
+    hasExplicitQty,
+    option,
+    item: {
+      ...baseItem,
+      depot: option.depot,
+      depotId: option.depotId || baseItem?.depotId || '',
+      depotUrl: option.depotUrl || baseItem?.depotUrl || '',
+      fiyatNum: option.effectiveUnit || baseItem?.fiyatNum || 0,
+      fiyat: (option.effectiveUnit || 0).toFixed(2).replace('.', ','),
+      malFazlasi: option.mfStr || baseItem?.malFazlasi || '',
+      stokVar: baseItem?.stokVar,
+      stok: baseItem?.stok,
+      stokGosterilsin: baseItem?.stokGosterilsin,
+    },
+  };
+}
+
+function updateBestPlanMenu(selection) {
+  const menu = document.getElementById('bestPlanMenu');
+  const meta = document.getElementById('bestPlanMeta');
+  const addBtn = document.getElementById('bestPlanAddBtn');
+  const depotBtn = document.getElementById('bestPlanDepotBtn');
+  if (!menu || !meta || !addBtn || !depotBtn) return;
+
+  if (!selection || !selection.hasExplicitQty) {
+    menu.style.display = 'none';
+    depotBtn.style.display = 'none';
+    return;
+  }
+
+  const { option, qty } = selection;
+  const modeText = option.mfStr
+    ? `${option.mfStr} kampanyasi ile ${option.orderQty} alinir, ${option.receiveQty} birim gelir.`
+    : `${qty} birim icin kampanyasiz plan hazirlandi.`;
+  meta.textContent = `${option.depot} secildi. ${modeText} Toplam odeme ${formatCurrency(option.totalCost)}.`;
+
+  menu.style.display = 'flex';
+  depotBtn.style.display = option.depotUrl ? 'inline-flex' : 'none';
+  depotBtn.onclick = () => {
+    if (option.depotUrl) copyAndOpenDepot(option.depotUrl, option.depotId || '');
+  };
+  addBtn.onclick = () => addCurrentToOrderPlan();
+}
+
+function updateBestOfferCard(items) {
+  const selection = getActiveBestSelection(items);
+  if (!selection) return;
+
+  const bestItem = selection.item;
+  document.getElementById('bestDepotName').textContent = bestItem.depot;
+  document.getElementById('bestPrice').textContent = formatCurrency(bestItem.fiyatNum || 0);
+
+  const stockText = bestItem.stokVar
+    ? (bestItem.stok > 0 && bestItem.stokGosterilsin ? bestItem.stok + ' Adet' : 'Stokta var')
+    : 'Stok yok';
+  const bestStockEl = document.getElementById('bestStock');
+  bestStockEl.textContent = stockText;
+  bestStockEl.style.color = bestItem.stokVar ? 'var(--status-green)' : 'var(--status-red)';
+
+  const bestMfGroup = document.getElementById('bestMfGroup');
+  const bestMf = document.getElementById('bestMf');
+  if (bestItem.malFazlasi) {
+    bestMf.textContent = bestItem.malFazlasi;
+    bestMfGroup.style.display = 'block';
+  } else {
+    bestMfGroup.style.display = 'none';
+  }
+
+  const bestLinkEl = document.getElementById('bestDepotLink');
+  if (bestItem.depotUrl) {
+    bestLinkEl.dataset.url = bestItem.depotUrl;
+    bestLinkEl.dataset.depotId = bestItem.depotId || '';
+    bestLinkEl.style.display = 'inline-flex';
+    bestLinkEl.onclick = () => copyAndOpenDepot(bestItem.depotUrl, bestItem.depotId || '');
+  } else {
+    bestLinkEl.style.display = 'none';
+  }
+
+  updateBestPlanMenu(selection);
+}
+
+function updateSearchActionMeta() {
+  const productEl = document.getElementById('searchActionProduct');
+  if (!productEl || !currentDetailItems.length) return;
+
+  const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
+  productEl.textContent = identity.name || 'Seçili ürün';
+  return;
+
+  const qty = _scActiveQty || 1;
+  const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
+  const planned = getPlannerOption(currentDetailItems, qty, { useMf: hasExplicitQty });
+
+  if (!planned || !planned.option) {
+    meta.textContent = 'En uygun depo ve maliyet bilgisi hesaplanamadi. Urunu yine de planiniza veya sabit listenize ekleyebilirsiniz.';
+    return;
+  }
+
+  if (!hasExplicitQty) {
+    const unitText = planned.option.effectiveUnit > 0
+      ? 'Birim fiyat ' + formatCurrency(planned.option.effectiveUnit)
+      : 'Fiyat bilgisi bekleniyor';
+    meta.textContent = `${planned.option.depot} su an en mantikli gorunen depo. ${unitText}; plan eklerseniz bu secim kaydedilir.`;
+    return;
+  }
+
+  const totalText = planned.option.totalCost > 0
+    ? 'Toplam odeme ' + formatCurrency(planned.option.totalCost)
+    : 'Fiyat bilgisi bekleniyor';
+
+  meta.textContent = `${planned.qty} birim icin ${planned.option.depot} oneriliyor. ${totalText}; siparis planina eklediginizde bu miktar korunur.`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -991,6 +1292,7 @@ function initStockCalc(items) {
   input.value = '';
   results.innerHTML = '';
   buildMfChips(items);
+  updateBestOfferCard(items);
   updateSearchActionMeta();
 }
 
@@ -1031,6 +1333,7 @@ function toggleStockCalc() {
       document.getElementById('stockCalcResults').innerHTML = '';
       document.querySelectorAll('.mf-chip').forEach(c => c.classList.remove('active'));
     }
+    updateBestOfferCard(_scItems);
     updateSearchActionMeta();
   }
 
@@ -1517,6 +1820,10 @@ function addCurrentToOrderPlan() {
   if (!currentDetailItems.length) return;
 
   const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
+  if (!isBarcodeQuery(identity.barcode || '')) {
+    showToast('Siparis plani icin barkod gerekli');
+    return;
+  }
   const useMfPlanning = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
   const planned = getPlannerOption(currentDetailItems, _scActiveQty || 1, { useMf: useMfPlanning });
   if (!planned || !planned.option) return;
@@ -1599,7 +1906,11 @@ function removeRoutineItem(key) {
 }
 
 function openSavedProduct(item) {
-  openHistorySearch(item.name || item.query, item.barcode || '');
+  if (!isBarcodeQuery(item?.barcode || '')) {
+    showToast('Bu plan kaydinda gecerli barkod yok');
+    return;
+  }
+  openHistorySearch(item.barcode, item.barcode);
 }
 
 function openOrderPlanDetail() {
@@ -1923,16 +2234,19 @@ function renderHomeDashboard() {
 // ── History ──
 function saveHistory(items, query) {
   if (!items || items.length === 0) return;
-  const bestItem = items.find(i => i.fiyatNum > 0) || items[0];
-  const isBarcode = /^\d{8,}$/.test(query);
+  const normalizedItems = dedupeSearchItems(items, query);
+  const identity = getSearchIdentity(normalizedItems, query);
+  const bestItem = normalizedItems.find(i => i.fiyatNum > 0) || normalizedItems[0];
   fetch(API_BASE + '/api/history', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ilac: bestItem.ad || query,
-      barkod: isBarcode ? query : null,
-      sonuclar: items.map(i => ({
+      ilac: identity.name || bestItem.ad || query,
+      barkod: identity.barcode || null,
+      sonuclar: normalizedItems.map(i => ({
         depot: i.depot,
+        barkod: i.barkod || getItemBarcode(i, query) || null,
+        ilac: i.ad,
         fiyat: i.fiyat,
         stok: i.stokVar,
         mf: i.malFazlasi || '',
@@ -2108,4 +2422,111 @@ async function deleteHistory(id) {
   renderHistory();
 }
 
+function applyHumanUiCopy() {
+  document.title = 'Eczane - İlaç Fiyat Karşılaştırma';
+
+  const textMap = [
+    ['.profile-menu-item:nth-of-type(1)', 'Arama Geçmişi'],
+    ['.profile-menu-item:nth-of-type(2)', 'Depo Ayarları'],
+    ['.hero-pill', 'Hızlı, net, güvenilir'],
+    ['.hero h1', 'En uygun ilacı\nhızla bulun'],
+    ['.hero p', 'Depo fiyatlarını tek ekranda karşılaştırın, doğru teklife daha kısa sürede ulaşın.'],
+    ['#orderPlanCard .ops-card-eyebrow', 'Sipariş'],
+    ['#orderPlanCard h3', 'Aktif Sipariş Planı'],
+    ['#orderPlanCard p', 'Seçtiğiniz ürünleri hedef adetleriyle burada takip edin.'],
+    ['#openOrderPlanBtn', 'Planı İncele'],
+    ['#clearOrderPlanBtn', 'Planı Temizle'],
+    ['#routineCard h3', 'Sabit İhtiyaç Listesi'],
+    ['#routineCard p', 'Sık aldığınız ürünleri tek tıkla yeniden sorgulayın.'],
+    ['.home-history-header h3', 'Arama Geçmişi'],
+    ['.home-history-header p', 'Son sorgularınıza tek tıkla geri dönün.'],
+    ['#loading div:last-child', 'Depolardan fiyat bilgileri alınıyor...'],
+    ['#searchActionProduct', 'Seçili ürün'],
+    ['#page-settings .settings-header h2', 'Depo Ayarları'],
+    ['#page-settings .settings-header p', 'Depo bağlantılarınızı buradan yönetin.'],
+    ['#page-history .settings-header h2', 'Arama Geçmişi'],
+    ['#page-history .settings-header p', 'Geçmiş ilaç aramaları ve fiyat karşılaştırmaları.'],
+    ['#page-order-plan .settings-header h2', 'Aktif Sipariş Planı'],
+    ['#page-order-plan .settings-header p', 'Planınızdaki ürünleri, seçilen depoları ve maliyetleri detaylı inceleyin.'],
+    ['#depotPanelTitle', 'Depo Adı'],
+  ];
+
+  textMap.forEach(([selector, value]) => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    if (selector === '.hero h1') {
+      el.innerHTML = 'En uygun ilacı<br><span class="hero-gradient">hızla bulun</span>';
+      return;
+    }
+    el.textContent = value;
+  });
+
+  const homeInput = document.getElementById('homeSearchInput');
+  if (homeInput) homeInput.placeholder = 'İlaç adı veya barkod girin...';
+
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) searchInput.placeholder = 'İlaç adı veya barkod...';
+
+  const variantTitle = document.querySelector('.variant-layer-header h3');
+  if (variantTitle) variantTitle.textContent = 'Farklı Ürün Formları';
+
+  const historyLink = document.querySelector('.home-history-header .home-history-link');
+  if (historyLink) historyLink.childNodes[0].textContent = 'Tümünü Gör ';
+
+  const variantDesc = document.querySelector('.variant-layer-header p');
+  if (variantDesc) {
+    variantDesc.innerHTML = 'Aramanıza ait <span id="variantCount">...</span> farklı ürün formu bulundu. Hangi formu karşılaştırmak istiyorsunuz?';
+  }
+
+  const productLabel = document.querySelector('.product-label');
+  if (productLabel) productLabel.textContent = 'Arama Sonuçları';
+
+  const stockTrigger = document.getElementById('stockCalcTrigger');
+  if (stockTrigger) stockTrigger.title = 'Stok Hesaplayıcı';
+
+  const stockFlyout = document.querySelector('.sc-flyout-title');
+  if (stockFlyout) stockFlyout.textContent = 'Stok ve MF Hesaplayıcı';
+
+  const bestBadge = document.querySelector('.best-badge');
+  if (bestBadge) bestBadge.textContent = 'En Ucuz Teklif';
+
+  const bestLabels = document.querySelectorAll('.best-value-label');
+  if (bestLabels[0]) bestLabels[0].textContent = 'Birim Fiyat';
+  if (bestLabels[1]) bestLabels[1].textContent = 'Kampanya / MF';
+  if (bestLabels[2]) bestLabels[2].textContent = 'Stok Durumu';
+
+  const actionEyebrow = document.querySelector('.action-panel-eyebrow');
+  if (actionEyebrow) actionEyebrow.textContent = 'Hızlı İşlem';
+
+  const actionTitle = document.querySelector('.action-panel-title');
+  if (actionTitle) actionTitle.textContent = 'Ürün işlemleri';
+
+  const actionSubtitle = document.querySelector('.action-panel-subtitle');
+  if (actionSubtitle) actionSubtitle.textContent = 'Ürünü plana ekleyin veya sabit listenize kaydedin.';
+
+  const actionLabel = document.querySelector('.action-summary-label');
+  if (actionLabel) actionLabel.textContent = 'Seçili ürün';
+
+  const actionTitlePrimary = document.querySelector('#addToPlanBtn .action-btn-title');
+  if (actionTitlePrimary) actionTitlePrimary.textContent = 'Sipariş Planına Ekle';
+
+  const actionSubPrimary = document.querySelector('#addToPlanBtn .action-btn-sub');
+  if (actionSubPrimary) actionSubPrimary.textContent = 'Aktif plana eklenir';
+
+  const actionTitleSecondary = document.querySelector('#addToRoutineBtn .action-btn-title');
+  if (actionTitleSecondary) actionTitleSecondary.textContent = 'Sabit Listeye Ekle';
+
+  const actionSubSecondary = document.querySelector('#addToRoutineBtn .action-btn-sub');
+  if (actionSubSecondary) actionSubSecondary.textContent = 'Sonra tek tıkla aç';
+
+  const otherHeader = document.querySelector('.others-header');
+  if (otherHeader) {
+    const title = otherHeader.querySelector('#otherDepotsTitle');
+    if (title) {
+      title.textContent = 'Depo Teklifleri';
+    }
+  }
+}
+
+applyHumanUiCopy();
 renderHomeDashboard();
