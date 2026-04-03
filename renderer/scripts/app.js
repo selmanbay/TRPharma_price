@@ -710,7 +710,7 @@ function renderVariantSelectionLayer(groups, query, allItems) {
 
 function renderDetailResults(items, query) {
   if (!items || items.length === 0) return;
-  items = dedupeSearchItems(items, query);
+  items = dedupeSearchItems(items, query).slice().sort(compareDepotItems);
   currentDetailItems = items.slice();
   currentDetailQuery = query;
 
@@ -910,6 +910,10 @@ function renderDetailResults(items, query) {
 
       tbody.appendChild(tr);
     });
+    const selectedRow = tbody.querySelector('tr.is-selected');
+    if (selectedRow && document.activeElement === document.body) {
+      selectedRow.focus();
+    }
     otherDepots.style.display = 'block';
     otherDepots.classList.add('result-table-enter');
     setTimeout(() => otherDepots.classList.remove('result-table-enter'), 500);
@@ -999,9 +1003,16 @@ function refreshOrderPlanViews() {
 function addPlannerOptionToOrderPlan(option, desiredQty, { toastLabel = '' } = {}) {
   if (!option) return false;
 
-  const sourceItem = option.sourceItem || resolveSelectedOfferItem(currentDetailItems) || currentDetailItems[0] || null;
-  const sourceItems = currentDetailItems.length ? currentDetailItems : (sourceItem ? [sourceItem] : []);
-  const sourceQuery = currentDetailQuery || sourceItem?.barcode || sourceItem?.barkod || sourceItem?.ad || '';
+  const hasDedicatedSourceItem = !!option.sourceItem;
+  const sourceItem = hasDedicatedSourceItem
+    ? option.sourceItem
+    : (resolveSelectedOfferItem(currentDetailItems) || currentDetailItems[0] || null);
+  const sourceItems = hasDedicatedSourceItem
+    ? [sourceItem].filter(Boolean)
+    : (currentDetailItems.length ? currentDetailItems : ([sourceItem].filter(Boolean)));
+  const sourceQuery = hasDedicatedSourceItem
+    ? (sourceItem?.barcode || sourceItem?.barkod || sourceItem?.ad || '')
+    : (currentDetailQuery || sourceItem?.barcode || sourceItem?.barkod || sourceItem?.ad || '');
   const identity = getSearchIdentity(sourceItems, sourceQuery);
   const barcode = String(identity.barcode || getItemBarcode(sourceItem, sourceQuery) || '').trim();
   const requestedQty = Math.max(parseInt(desiredQty, 10) || 1, 1);
@@ -1022,9 +1033,9 @@ function addPlannerOptionToOrderPlan(option, desiredQty, { toastLabel = '' } = {
   const effectiveUnit = normalizedOption.effectiveUnit
     || normalizedOption.unitPrice
     || (normalizedOption.orderQty > 0 ? normalizedOption.totalCost / normalizedOption.orderQty : 0);
-  const totalCost = effectiveUnit > 0
-    ? effectiveUnit * requestedQty
-    : (Number(normalizedOption.totalCost) || 0);
+  const totalCost = normalizedOption.totalCost > 0 && normalizedOption.orderQty === requestedQty
+    ? Number(normalizedOption.totalCost)
+    : (effectiveUnit > 0 ? effectiveUnit * requestedQty : (Number(normalizedOption.totalCost) || 0));
 
   const nextEntry = normalizeOrderPlanItem({
     key: barcode,
@@ -1264,6 +1275,35 @@ function updateSearchActionMeta() {
   productEl.textContent = (identity.name || 'Secili urun') + depotSuffix;
 }
 
+function compareDepotItems(a, b) {
+  const aPrice = Number(a?.fiyatNum) || Number.MAX_SAFE_INTEGER;
+  const bPrice = Number(b?.fiyatNum) || Number.MAX_SAFE_INTEGER;
+  if (Math.abs(aPrice - bPrice) > 0.0001) return aPrice - bPrice;
+
+  const aDepot = String(a?.depot || a?.depotId || '');
+  const bDepot = String(b?.depot || b?.depotId || '');
+  const depotCompare = aDepot.localeCompare(bDepot, 'tr');
+  if (depotCompare !== 0) return depotCompare;
+
+  const aName = String(a?.ad || '');
+  const bName = String(b?.ad || '');
+  return aName.localeCompare(bName, 'tr');
+}
+
+function comparePlannerOptions(a, b) {
+  const aUnit = Number(a?.effectiveUnit) || Number.MAX_SAFE_INTEGER;
+  const bUnit = Number(b?.effectiveUnit) || Number.MAX_SAFE_INTEGER;
+  if (Math.abs(aUnit - bUnit) > 0.0001) return aUnit - bUnit;
+
+  const aTotal = Number(a?.totalCost) || Number.MAX_SAFE_INTEGER;
+  const bTotal = Number(b?.totalCost) || Number.MAX_SAFE_INTEGER;
+  if (Math.abs(aTotal - bTotal) > 0.0001) return aTotal - bTotal;
+
+  const aDepot = String(a?.depot || a?.depotId || '');
+  const bDepot = String(b?.depot || b?.depotId || '');
+  return aDepot.localeCompare(bDepot, 'tr');
+}
+
 // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // STOCK CALCULATOR
 // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
@@ -1301,7 +1341,7 @@ function buildUnitOptions(items, targetQty = 1) {
     }
   });
 
-  return Array.from(bestPerDepot.values()).sort((a, b) => a.effectiveUnit - b.effectiveUnit);
+  return Array.from(bestPerDepot.values()).sort(comparePlannerOptions);
 }
 
 function calcMfOptions(items, targetQty) {
@@ -1378,7 +1418,7 @@ function calcMfOptions(items, targetQty) {
     }
   });
 
-  return Array.from(bestPerDepot.values()).sort((a, b) => a.effectiveUnit - b.effectiveUnit);
+  return Array.from(bestPerDepot.values()).sort(comparePlannerOptions);
 }
 
 function getFallbackPlannerOptions(items, targetQty) {
@@ -1475,7 +1515,7 @@ async function resolveQuotedOptions(items, targetQty) {
   // Max QUOTE_CONCURRENCY_LIMIT kadar paralel, sirasyla calistir
   const quoted = await runConcurrent(tasks, QUOTE_CONCURRENCY_LIMIT);
 
-  return quoted.sort((a, b) => a.effectiveUnit - b.effectiveUnit);
+  return quoted.sort(comparePlannerOptions);
 }
 
 async function resolvePlannerOptions(items, targetQty) {
@@ -2681,6 +2721,11 @@ function renderBulkResultCard(query, items, container) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); }
       });
     });
+
+    const selectedRow = rowsEl.querySelector('.bulk-offer-row.bulk-offer-selected');
+    if (selectedRow && document.activeElement === document.body) {
+      selectedRow.focus();
+    }
   }
 
   function syncFooter() {

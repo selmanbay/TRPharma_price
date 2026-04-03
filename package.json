@@ -1,6 +1,6 @@
 {
   "name": "eczane-app",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Eczane İlaç Fiyat Karşılaştırma",
   "main": "main.js",
   "scripts": {
