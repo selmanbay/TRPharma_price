@@ -1,7 +1,8 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, session, dialog } = require('electron');
+﻿const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, session, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const { ensureConfigFile, getConfigPath, loadConfig } = require('./src/config-store');
 
 // Prevent Express from opening a browser window
@@ -42,6 +43,16 @@ let isQuitting = false;
 let updateDownloaded = false;
 let updateCheckInFlight = false;
 let updateCheckInterval = null;
+
+function findChromeExecutable() {
+  const candidates = [
+    path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
 
 const UPDATE_CHECK_DELAY_MS = 15 * 1000;
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -148,34 +159,46 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  const sendStatus = (payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-status', payload);
+    }
+  };
+
   autoUpdater.on('checking-for-update', () => {
     updateCheckInFlight = true;
     console.log('[updater] Checking for updates...');
+    sendStatus({ phase: 'checking' });
   });
 
   autoUpdater.on('update-available', (info) => {
     console.log(`[updater] Update available: ${info?.version || 'unknown-version'}`);
+    sendStatus({ phase: 'available', version: info?.version });
   });
 
   autoUpdater.on('update-not-available', (info) => {
     updateCheckInFlight = false;
     console.log(`[updater] No update available. Current latest: ${info?.version || app.getVersion()}`);
+    sendStatus({ phase: 'up-to-date', version: info?.version || app.getVersion() });
   });
 
   autoUpdater.on('error', (error) => {
     updateCheckInFlight = false;
     console.error('[updater] Error:', error?.message || error);
+    sendStatus({ phase: 'error', message: error?.message || String(error) });
   });
 
   autoUpdater.on('download-progress', (progress) => {
     const percent = typeof progress?.percent === 'number' ? progress.percent.toFixed(1) : '0.0';
     console.log(`[updater] Downloading update... ${percent}%`);
+    sendStatus({ phase: 'downloading', percent: parseFloat(percent) });
   });
 
   autoUpdater.on('update-downloaded', async (info) => {
     updateCheckInFlight = false;
     updateDownloaded = true;
     console.log(`[updater] Update downloaded: ${info?.version || 'unknown-version'}`);
+    sendStatus({ phase: 'downloaded', version: info?.version });
 
     const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
     const result = await dialog.showMessageBox(targetWindow, {
@@ -238,6 +261,20 @@ ipcMain.on('close', () => {
 
 ipcMain.handle('is-maximized', () => {
   return mainWindow ? mainWindow.isMaximized() : false;
+});
+
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('check-for-updates', () => {
+  if (!app.isPackaged) return { status: 'dev-mode' };
+  if (updateDownloaded)    return { status: 'already-downloaded' };
+  if (updateCheckInFlight) return { status: 'already-checking' };
+  updateCheckInFlight = true;
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    updateCheckInFlight = false;
+    console.error('[updater] Manuel kontrol hatası:', err?.message || err);
+  });
+  return { status: 'checking' };
 });
 
 ipcMain.handle('get-depot-cookies', (_event, depotId) => {
@@ -319,8 +356,64 @@ ipcMain.handle('inject-depot-cookies', async (_event, depotId, targetUrl) => {
   }
 });
 
+ipcMain.handle('open-url-in-chrome', async (_event, targetUrl) => {
+  try {
+    if (!targetUrl) {
+      return { success: false, reason: 'missing-url' };
+    }
+
+    const chromePath = findChromeExecutable();
+    if (chromePath) {
+      const child = spawn(chromePath, [targetUrl], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+      return { success: true, mode: 'chrome', path: chromePath };
+    }
+
+    await shell.openExternal(targetUrl);
+    return { success: true, mode: 'default-browser' };
+  } catch (error) {
+    return { success: false, reason: error?.message || String(error) };
+  }
+});
+
 // ── App Lifecycle ──
 
+
+
+/**
+ * Express server'in localhost:3000'de hazir olmasini bekler.
+ * 200ms arayla polling yapar, max maxWaitMs kadar dener.
+ * Timeout olursa false doner ama yine de pencere acilir.
+ */
+function waitForServer(maxWaitMs, intervalMs) {
+  maxWaitMs = maxWaitMs || 15000;
+  intervalMs = intervalMs || 200;
+  const http = require('http');
+  const start = Date.now();
+  return new Promise(function(resolve) {
+    function tryOnce() {
+      const req = http.get('http://localhost:3000', function(res) {
+        res.resume();
+        console.log('[startup] Express hazir, pencere aciliyor.');
+        resolve(true);
+      });
+      req.on('error', function() {
+        const elapsed = Date.now() - start;
+        if (elapsed < maxWaitMs) {
+          setTimeout(tryOnce, intervalMs);
+        } else {
+          console.warn('[startup] Express ' + maxWaitMs + 'ms icinde hazir olmadi, yine de devam ediliyor.');
+          resolve(false);
+        }
+      });
+      req.setTimeout(500, function() { req.destroy(); });
+    }
+    tryOnce();
+  });
+}
 app.whenReady().then(() => {
   process.env.ECZANE_CONFIG_PATH = getConfigPath();
   ensureConfigFile();
@@ -331,13 +424,13 @@ app.whenReady().then(() => {
   // Start Express server in the same process
   require('./src/server.js');
 
-  // Wait a moment for Express to bind to port
-  setTimeout(() => {
+  // Sabit 1000ms beklemek yerine server'in gercekten hazir olmasini bekle
+  waitForServer().then(function() {
     createWindow();
     createTray();
     registerShortcuts();
     scheduleUpdateChecks();
-  }, 1000);
+  });
 });
 
 app.on('before-quit', () => {

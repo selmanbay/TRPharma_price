@@ -9,9 +9,11 @@ const AllianceDepot = require('./depots/alliance');
 const SentezDepot = require('./depots/sentez');
 const fs = require('fs');
 const { ensureConfigFile, ensureDataFile, getConfigPath, getDataFilePath } = require('./config-store');
+const { isSetupComplete, setupUser, loginUser } = require('./auth');
+const { requireAuth } = require('./auth-middleware');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'renderer')));
@@ -71,10 +73,52 @@ function initDepots() {
   }
 }
 
+function getConfiguredDepotById(depotId) {
+  const depotInfo = DEPOT_CLASSES[depotId];
+  if (!depotInfo) return null;
+  return manager.depots.find((d) => d.name === depotInfo.name) || null;
+}
+
+// ── Auth Routes (public) ──────────────────────────────────────────────────────
+
+app.get('/api/auth/setup-status', (req, res) => {
+  res.json({ needsSetup: !isSetupComplete() });
+});
+
+app.post('/api/auth/setup', async (req, res) => {
+  try {
+    const { displayName, password } = req.body;
+    const auth = await setupUser({ displayName, password });
+    const { token, user } = await loginUser(password);
+    res.json({ success: true, token, user });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Şifre gerekli' });
+    const { token, user } = await loginUser(password);
+    res.json({ success: true, token, user });
+  } catch (err) {
+    res.status(401).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ user: req.user });
+});
+
 // ── API Routes ──
 
 // Autocomplete — Selçuk'tan isim+barkod, diğer depolardan yedek barkod
-app.get('/api/autocomplete', async (req, res) => {
+app.get('/api/autocomplete', requireAuth, async (req, res) => {
   const { q } = req.query;
   if (!q || q.length < 2) {
     return res.json({ suggestions: [] });
@@ -163,7 +207,7 @@ app.get('/api/autocomplete', async (req, res) => {
 });
 
 // Barkod ile tüm depolardan arama (Eski Monolithic Method)
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', requireAuth, async (req, res) => {
   const { q } = req.query;
   if (!q) {
     return res.status(400).json({ error: 'Arama terimi gerekli (?q=...)' });
@@ -182,7 +226,7 @@ app.get('/api/search', async (req, res) => {
 });
 
 // Tek bir depodan asenkron arama (Yeni Hızlı Method)
-app.get('/api/search-depot', async (req, res) => {
+app.get('/api/search-depot', requireAuth, async (req, res) => {
   const { q, depotId } = req.query;
   if (!q || !depotId) return res.status(400).json({ error: 'Sorgu param eksik' });
 
@@ -228,8 +272,31 @@ app.get('/api/search-depot', async (req, res) => {
   }
 });
 
+app.post('/api/quote-option', requireAuth, async (req, res) => {
+  const { depotId, item, option, targetQty } = req.body || {};
+  if (!depotId || !item) {
+    return res.status(400).json({ success: false, error: 'depotId ve item gerekli' });
+  }
+
+  const targetDepot = getConfiguredDepotById(depotId);
+  if (!targetDepot) {
+    return res.status(404).json({ success: false, error: 'Depot ayarli degil' });
+  }
+
+  if (typeof targetDepot.quoteOption !== 'function') {
+    return res.json({ success: true, quote: null });
+  }
+
+  try {
+    const quote = await targetDepot.quoteOption(item, option || {}, targetQty || 1);
+    res.json({ success: true, quote });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Depot ayarlarını getir (şifreleri gizle)
-app.get('/api/config', (req, res) => {
+app.get('/api/config', requireAuth, (req, res) => {
   const config = loadConfig();
   const safe = { depots: {}, availableDepots: {} };
 
@@ -261,7 +328,7 @@ app.get('/api/config', (req, res) => {
 });
 
 // Depot ayarlarını kaydet
-app.post('/api/config/depot', (req, res) => {
+app.post('/api/config/depot', requireAuth, (req, res) => {
   const { depotId, credentials, cookies, token } = req.body;
 
   if (!depotId) {
@@ -294,7 +361,7 @@ app.post('/api/config/depot', (req, res) => {
 });
 
 // Depot sil
-app.delete('/api/config/depot/:depotId', (req, res) => {
+app.delete('/api/config/depot/:depotId', requireAuth, (req, res) => {
   const config = loadConfig();
   delete config.depots[req.params.depotId];
   saveConfig(config);
@@ -303,7 +370,7 @@ app.delete('/api/config/depot/:depotId', (req, res) => {
 });
 
 // Login test — credential'larla login denemesi yap
-app.post('/api/test-login', async (req, res) => {
+app.post('/api/test-login', requireAuth, async (req, res) => {
   try {
   const { depotId, credentials } = req.body;
 
@@ -389,19 +456,20 @@ function saveHistory(data) {
   fs.writeFileSync(HISTORY_PATH, JSON.stringify(data, null, 2));
 }
 
-app.get('/api/history', (req, res) => {
+app.get('/api/history', requireAuth, (req, res) => {
   const history = loadHistory();
   const limit = parseInt(req.query.limit) || 100;
   res.json(history.slice(0, limit));
 });
 
-app.post('/api/history', (req, res) => {
+app.post('/api/history', requireAuth, (req, res) => {
   const { ilac, barkod, sonuclar, enUcuz } = req.body;
   if (!ilac) return res.status(400).json({ error: 'İlaç adı gerekli' });
 
   const history = loadHistory();
   const entry = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    userId: 'local',
     tarih: new Date().toISOString(),
     ilac,
     barkod: barkod || null,
@@ -414,17 +482,41 @@ app.post('/api/history', (req, res) => {
   res.json({ success: true, id: entry.id });
 });
 
-app.delete('/api/history/:id', (req, res) => {
+app.delete('/api/history/:id', requireAuth, (req, res) => {
   let history = loadHistory();
   history = history.filter(h => h.id !== req.params.id);
   saveHistory(history);
   res.json({ success: true });
 });
 
+// ── History Migration ─────────────────────────────────────────────────────────
+
+function migrateHistory() {
+  const sentinelPath = getDataFilePath('history.migrated');
+  if (fs.existsSync(sentinelPath)) return;
+
+  try {
+    const history = loadHistory();
+    let changed = false;
+    for (const entry of history) {
+      if (!entry.userId) {
+        entry.userId = 'local';
+        changed = true;
+      }
+    }
+    if (changed) saveHistory(history);
+    fs.writeFileSync(sentinelPath, new Date().toISOString(), 'utf-8');
+    console.log('[history] Migration tamamlandı: userId alanı eklendi');
+  } catch (err) {
+    console.error('[history] Migration hatası:', err.message);
+  }
+}
+
 // ── Start ──
 ensureConfigFile();
 console.log(`[config] Server config: ${CONFIG_PATH}`);
 console.log(`[history] Server history: ${HISTORY_PATH}`);
+migrateHistory();
 initDepots();
 app.listen(PORT, () => {
   console.log(`\n  Eczane App çalışıyor: http://localhost:${PORT}\n`);

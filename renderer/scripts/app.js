@@ -1,6 +1,16 @@
-const API_BASE = 'http://localhost:3000';
+﻿const API_BASE = 'http://localhost:3000';
 
-// ── Title bar controls ──
+// -- Global error reporting (sessiz kirilmalari konsola ceker) --
+window.addEventListener('error', function(e) {
+  console.error('[GlobalError]', e.message, e.filename + ':' + e.lineno);
+});
+window.addEventListener('unhandledrejection', function(e) {
+  console.error('[UnhandledPromise]', e.reason);
+});
+
+
+
+// Ã¢â€â‚¬Ã¢â€â‚¬ Title bar controls Ã¢â€â‚¬Ã¢â€â‚¬
 if (window.electronAPI) {
   document.getElementById('tbMinimize').addEventListener('click', () => window.electronAPI.minimize());
   document.getElementById('tbMaximize').addEventListener('click', () => window.electronAPI.maximize());
@@ -15,12 +25,12 @@ if (window.electronAPI) {
     }
   });
 } else {
-  // Tarayıcı ortamında (Localhost:3000 Web) çalışıyorsa Electron özel Titlebar'ı gizle
+  // TarayÃ„Â±cÃ„Â± ortamÃ„Â±nda (Localhost:3000 Web) ÃƒÂ§alÃ„Â±Ã…Å¸Ã„Â±yorsa Electron ÃƒÂ¶zel Titlebar'Ã„Â± gizle
   const titlebar = document.getElementById('titlebar');
   if (titlebar) titlebar.style.display = 'none';
 }
 
-// ── Navigation with transitions ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Navigation with transitions Ã¢â€â‚¬Ã¢â€â‚¬
 let currentPage = 'home';
 
 function showPage(name) {
@@ -81,7 +91,7 @@ function showPage(name) {
   }, isBack ? 180 : 200);
 }
 
-// ── Profile menu ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Profile menu Ã¢â€â‚¬Ã¢â€â‚¬
 function toggleProfileMenu() {
   document.querySelector('.profile-wrapper').classList.toggle('open');
 }
@@ -125,7 +135,7 @@ document.getElementById('searchInput').addEventListener('keydown', e => {
   }
 });
 
-// ── Keyboard shortcuts ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Keyboard shortcuts Ã¢â€â‚¬Ã¢â€â‚¬
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 'f') {
     e.preventDefault();
@@ -148,50 +158,12 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── Barcode extraction & QR Parsing ──
-function extractBarcode(kodu) {
-  if (!kodu) return null;
-  const str = String(kodu).trim();
-  // Barkodlar genelde 86 ile başlar ve 13 hanelidir.
-  if (str.length >= 13 && str.startsWith('8')) return str;
-  return null;
-}
-
-/**
- * Karekod (GS1 DataMatrix) içinden 13 haneli barkodu ayıklar.
- * Örn: 010869953609011521... -> 8699536090115
- */
-function parseQRCode(input) {
-  if (!input) return null;
-  const raw = String(input).trim();
-  
-  // 1. Zaten temiz barkodsa direkt döndür (0 dolgusuz 13 hane)
-  if (/^869\d{10}$/.test(raw)) return raw;
-  
-  // 2. 0 ile başlayan 14 haneli (0+869...) ise 0'ı at
-  if (/^0869\d{10}$/.test(raw)) return raw.substring(1);
-
-  // 3. GS1 DataMatrix: 01 ile başlar, 14 haneli GTIN içerir
-  if (raw.startsWith('01') && raw.length >= 16) {
-    // 01(2 hane) + 0(dolgu 1 hane) + 13(barkod)
-    const gtinCandidate = raw.substring(3, 16);
-    if (gtinCandidate.startsWith('869')) return gtinCandidate;
-    
-    // Bazı dolgu senaryoları için (Padding check)
-    const gtinCandidate2 = raw.substring(2, 15);
-    if (gtinCandidate2.startsWith('869')) return gtinCandidate2;
-  }
-
-  // 4. Fallback search: Herhangi bir 869... 13 haneli dizisi bul
-  const match = raw.match(/869\d{10}/);
-  return match ? match[0] : raw;
-}
-
-// ── Search ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Search Ã¢â€â‚¬Ã¢â€â‚¬
 let selectedBarcode = null;
 let selectedVariant = null;
 let currentDetailItems = [];
 let currentDetailQuery = '';
+let currentSelectedOfferKey = '';
 
 const STORAGE_KEYS = {
   orderPlan: 'eczane.orderPlan.v1',
@@ -244,16 +216,25 @@ function normalizeOrderPlanItem(item) {
     return null;
   }
 
+  const desiredQty = Math.max(parseInt(item?.desiredQty, 10) || 1, 1);
+  const rawOrderQty = Math.max(parseInt(item?.orderQty, 10) || 0, 0);
+  const rawReceiveQty = Math.max(parseInt(item?.receiveQty, 10) || 0, 0);
+  const rawTotalCost = Number(item?.totalCost) || 0;
+  const derivedUnit = Number(item?.effectiveUnit)
+    || Number(item?.unitPrice)
+    || (rawOrderQty > 0 ? rawTotalCost / rawOrderQty : 0)
+    || (desiredQty > 0 ? rawTotalCost / desiredQty : 0);
+
   const nextItem = {
     ...item,
     key: barcode,
     barcode,
     query: barcode,
-    desiredQty: Math.max(parseInt(item?.desiredQty, 10) || 1, 1),
-    orderQty: Math.max(parseInt(item?.orderQty, 10) || 0, 0),
-    receiveQty: Math.max(parseInt(item?.receiveQty, 10) || 0, 0),
-    totalCost: Number(item?.totalCost) || 0,
-    effectiveUnit: Number(item?.effectiveUnit) || 0,
+    desiredQty,
+    orderQty: desiredQty,
+    receiveQty: desiredQty,
+    totalCost: derivedUnit > 0 ? derivedUnit * desiredQty : rawTotalCost,
+    effectiveUnit: derivedUnit,
     planningMode: item?.planningMode || 'unit',
   };
 
@@ -288,53 +269,6 @@ function normalizeRoutineItem(item) {
   };
 }
 
-function dedupeStoredItems(items, getKey) {
-  const map = new Map();
-  for (const item of items || []) {
-    const key = getKey(item);
-    if (!key) continue;
-    if (!map.has(key)) {
-      map.set(key, item);
-    }
-  }
-  return Array.from(map.values());
-}
-
-function slugifyName(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-function normalizeImageUrl(url, baseUrl = '') {
-  if (!url) return '';
-  const raw = String(url).trim();
-  if (!raw) return '';
-  if (raw.startsWith('//')) return `https:${raw}`;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (baseUrl) {
-    try {
-      return new URL(raw, baseUrl).toString();
-    } catch {}
-  }
-  return raw;
-}
-
-function isUsableImageUrl(url) {
-  if (!url) return false;
-  const lower = String(url).toLowerCase();
-  return !['yok', 'no-image', 'noimage', 'default', 'c=.png'].some((keyword) => lower.includes(keyword));
-}
-
-function getImageFallbackSvg(size = 24) {
-  return `
-    <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-    </svg>
-  `;
-}
-
 function buildVariantImageMarkup(url) {
   const normalized = normalizeImageUrl(url);
   if (!normalized || !isUsableImageUrl(normalized)) {
@@ -350,24 +284,6 @@ function buildVariantImageMarkup(url) {
     />
     <div class="v-list-img-fallback" style="display:none;">${getImageFallbackSvg(24)}</div>
   `;
-}
-
-function normalizeDrugName(name) {
-  if (!name) return 'Bilinmeyen İlaç Formu';
-  let n = name.toUpperCase().replace(/İ/g, 'I');
-  // Kısaltmaları normalize et
-  n = n.replace(/\b(TABLET|TAB\.|TB\.|TAB|TB)\b/g, 'TAB');
-  n = n.replace(/\b(KAPSUL|KAPSÜL|KAP\.|KPS\.)\b/g, 'KAP');
-  n = n.replace(/\b(FILM TAB|FLM TAB|FLM\.TAB|F\.TAB|F\. TABLET|FILM TABLET)\b/g, 'FILM TAB');
-  n = n.replace(/\b(SURUP|ŞURUP|SRP|SYR)\b/g, 'ŞURUP');
-  n = n.replace(/\b(SUSPANSIYON|SÜSPANSİYON|SÜSP\.)\b/g, 'SÜSP');
-  n = n.replace(/\b(PED\.|PEDIATRIK|PEDİATRİK)\b/g, 'PED');
-  n = n.replace(/\s+/g, ' ').trim();
-  return n;
-}
-
-function isBarcodeQuery(value) {
-  return /^\d{13,}$/.test(String(value || '').trim());
 }
 
 function getItemBarcode(item, fallbackQuery = '') {
@@ -484,10 +400,41 @@ function dedupeSearchItems(items, query = '') {
 }
 
 let searchStartTime = 0;
-const MIN_GATHER_TIME = 1500; // 1.5 saniye bekle ki kartlar zıplamasın
+const MIN_GATHER_TIME = 1500; // 1.5 saniye bekle ki kartlar ziplamasm
+let pendingSearchRenderTimer = null;
+
+// Faz 2 - Render batching: depo yanitlari tek noktal gelirse 120ms throttle ile birlestir
+const RENDER_BATCH_MS = 120;
+let _batchRenderTimer = null;
+
+/**
+ * Gelen her depo yaniti icin aninda render etmek yerine
+ * RENDER_BATCH_MS ms bekleyip son birlesik state ile render yapar.
+ * Barkod aramalarinda bypass edilir (hiz kritik).
+ */
+function scheduleRender(getItems, query, searchId, isBarcodeQ) {
+  // Barkodlarda throttle yok - direkt render
+  if (isBarcodeQ) {
+    if (searchId !== _activeSearchId) return;
+    renderResults(getItems(), query);
+    return;
+  }
+
+  if (_batchRenderTimer) clearTimeout(_batchRenderTimer);
+  _batchRenderTimer = setTimeout(function() {
+    _batchRenderTimer = null;
+    if (searchId !== _activeSearchId) return;
+    const items = getItems();
+    if (items.length > 0) renderResults(items, query);
+  }, RENDER_BATCH_MS);
+}
 
 let lastSearchQuery = null;
 let lastSearchTime = 0;
+
+// Race condition koruması: her aramaya artan bir kimlik atanır.
+// Eski bir aramanın geç gelen yanıtı yeni sonucu ezemez.
+let _activeSearchId = 0;
 
 async function doSearch() {
   const nowTime = Date.now();
@@ -501,7 +448,7 @@ async function doSearch() {
     input.value = cleanBarcode;
   }
 
-  // 300ms içinde aynı arama geldiyse (karekod hızı) blokla
+  // 300ms iÃƒÂ§inde aynÃ„Â± arama geldiyse (karekod hÃ„Â±zÃ„Â±) blokla
   if (query === lastSearchQuery && (nowTime - lastSearchTime < 300)) return;
   
   lastSearchQuery = query;
@@ -513,6 +460,10 @@ async function doSearch() {
 
   const loading = document.getElementById('loading');
   const status = document.getElementById('statusMsg');
+  if (pendingSearchRenderTimer) {
+    clearTimeout(pendingSearchRenderTimer);
+    pendingSearchRenderTimer = null;
+  }
 
   loading.style.display = 'block';
   status.textContent = 'Sonuçlar aranıyor...';
@@ -520,6 +471,12 @@ async function doSearch() {
 
   if (!cachedConfig) {
     await loadDepotStatus();
+  }
+  if (!cachedConfig || !cachedConfig.depots) {
+    loading.style.display = 'none';
+    status.textContent = 'Depo ayarları yüklenemedi. Lütfen tekrar deneyin.';
+    status.className = 'status-msg error';
+    return;
   }
 
   const activeDepots = DEPOT_LIST.filter(d => {
@@ -533,11 +490,15 @@ async function doSearch() {
     return;
   }
 
+  // Race condition koruması: bu aramaya özel token oluştur
+  const searchId = ++_activeSearchId;
+
   let allItems = [];
   let pendingReqs = activeDepots.length;
 
   // Ekran titremesini önle: UI'ı sadece ilk 100ms'den sonra temizle (eğer sonuç yoksa)
   setTimeout(() => {
+    if (searchId !== _activeSearchId) return; // Bu arama artık geçerli değil
     if (Date.now() - searchStartTime >= 100) {
       const resultsBody = document.getElementById('resultsBody');
       if (resultsBody) resultsBody.innerHTML = '';
@@ -554,35 +515,62 @@ async function doSearch() {
   document.getElementById('stockCalcTrigger').classList.remove('open');
   currentDetailItems = [];
   currentDetailQuery = '';
+  currentSelectedOfferKey = '';
+  const actionQtyInput = document.getElementById('searchActionQtyInput');
+  if (actionQtyInput) actionQtyInput.value = '1';
 
   activeDepots.forEach(depot => {
-    fetch(`${API_BASE}/api/search-depot?q=${encodeURIComponent(query)}&depotId=${depot.id}`)
+    authFetch(`${API_BASE}/api/search-depot?q=${encodeURIComponent(query)}&depotId=${depot.id}`)
       .then(res => res.json())
       .then(data => {
+        // Eski arama yanıtı geldiyse sessizce yoksay
+        if (searchId !== _activeSearchId) return;
+
         if (!data.error && data.results && data.results.length > 0) {
           const depotUrl = data.depotUrl || '';
           data.results.forEach(r => { r.depotUrl = depotUrl; r.depotId = depot.id; });
+          // Faz 2: concat-only, sort/dedupe sadece render aninda yapilir
           allItems = allItems.concat(data.results);
-          allItems.sort((a, b) => {
-            if (a.fiyatNum === 0 && b.fiyatNum !== 0) return 1;
-            if (b.fiyatNum === 0 && a.fiyatNum !== 0) return -1;
-            return a.fiyatNum - b.fiyatNum;
-          });
-          renderResults(allItems, query);
+          const isBarcode = isBarcodeQuery(query);
+          scheduleRender(function() {
+            // Sort render aninda - her depoda degil
+            return allItems.slice().sort(function(a, b) {
+              if (a.fiyatNum === 0 && b.fiyatNum !== 0) return 1;
+              if (b.fiyatNum === 0 && a.fiyatNum !== 0) return -1;
+              return a.fiyatNum - b.fiyatNum;
+            });
+          }, query, searchId, isBarcode);
+          if (!isBarcode && selectedVariant === null) {
+            const remaining = Math.max(MIN_GATHER_TIME - (Date.now() - searchStartTime), 0);
+            if (pendingSearchRenderTimer) clearTimeout(pendingSearchRenderTimer);
+            pendingSearchRenderTimer = setTimeout(function() {
+              if (searchId !== _activeSearchId) return;
+              if (allItems.length > 0) renderResults(allItems, query);
+              pendingSearchRenderTimer = null;
+            }, remaining + 10);
+          }
         }
       })
       .catch(err => {
+        if (searchId !== _activeSearchId) return;
         console.error(`${depot.name} error:`, err);
       })
       .finally(() => {
         pendingReqs--;
         if (pendingReqs === 0) {
-          loading.style.display = 'none';
-          if (allItems.length === 0) {
-            status.textContent = 'İlaç bulunamadı (veya stokta yok).';
-          } else {
-            status.textContent = '';
-            saveHistory(allItems, query);
+          // Sadece hâlâ aktif aramanın sonunda loading'i kapat
+          if (searchId === _activeSearchId) {
+            loading.style.display = 'none';
+            if (allItems.length === 0) {
+              status.textContent = 'Ilac bulunamadi (veya stokta yok).';
+            } else {
+              status.textContent = '';
+              saveHistory(allItems, query);
+            }
+            if (pendingSearchRenderTimer && allItems.length === 0) {
+              clearTimeout(pendingSearchRenderTimer);
+              pendingSearchRenderTimer = null;
+            }
           }
         }
       });
@@ -598,7 +586,7 @@ function renderResults(items, query) {
   const elapsed = now - searchStartTime;
   const barcodeHints = getBarcodeHints(items, query);
 
-  // 1.5 saniye dolmadan sonuç gösterme (Görsel stabilite için)
+  // 1.5 saniye dolmadan sonuÃƒÂ§ gÃƒÂ¶sterme (GÃƒÂ¶rsel stabilite iÃƒÂ§in)
   if (!isBarcode && selectedVariant === null && elapsed < MIN_GATHER_TIME) {
     return;
   }
@@ -648,7 +636,7 @@ function renderResults(items, query) {
     
     if (!g.imgUrl && hasValidImg) g.imgUrl = normalizedImgUrl;
     
-    // İsim temizleme: En kısa olanı (en jenerik olanı) seç
+    // Ã„Â°sim temizleme: En kÃ„Â±sa olanÃ„Â± (en jenerik olanÃ„Â±) seÃƒÂ§
     if (i.ad.length < g.originalName.length) {
       g.originalName = i.ad;
     }
@@ -687,7 +675,7 @@ function renderVariantSelectionLayer(groups, query, allItems) {
     const card = document.createElement('div');
     card.className = 'variant-card-list';
     const hasPrice = g.bestPrice !== Infinity;
-    const priceText = hasPrice ? `₺${g.bestPrice.toFixed(2)}'den başlayan` : 'Stokta yok';
+    const priceText = hasPrice ? `TL ${g.bestPrice.toFixed(2)}'den baslayan` : 'Stokta yok';
     
     card.innerHTML = `
       <div class="v-list-img">${buildVariantImageMarkup(g.imgUrl)}</div>
@@ -726,6 +714,10 @@ function renderDetailResults(items, query) {
   currentDetailItems = items.slice();
   currentDetailQuery = query;
 
+  const bestItem = items.find(i => i.fiyatNum > 0) || items[0];
+  const selectedItem = resolveSelectedOfferItem(items) || bestItem;
+  setSelectedOffer(selectedItem, items);
+
   const productCard = document.getElementById('productCard');
   const bestPriceCard = document.getElementById('bestPriceCard');
   const otherDepots = document.getElementById('otherDepots');
@@ -761,7 +753,7 @@ function renderDetailResults(items, query) {
   document.getElementById('productCount').textContent = 'Toplam ' + items.length + ' Teklif Bulundu';
 
   const imgEl = document.getElementById('productImg');
-  const preferredDepotOrder = ['Selçuk Ecza', 'Sentez B2B', 'Nevzat Ecza', 'Anadolu İtriyat', 'Alliance Healthcare', 'Anadolu Pharma'];
+  const preferredDepotOrder = ['SelÃƒÂ§uk Ecza', 'Sentez B2B', 'Nevzat Ecza', 'Anadolu Ã„Â°triyat', 'Alliance Healthcare', 'Anadolu Pharma'];
   const imgCandidates = items
     .map((item) => ({ ...item, resolvedImgUrl: normalizeImageUrl(item.imgUrl, item.depotUrl) }))
     .filter((item) => item.resolvedImgUrl && isUsableImageUrl(item.resolvedImgUrl));
@@ -794,10 +786,9 @@ function renderDetailResults(items, query) {
   productCard.classList.add('result-card-enter');
   setTimeout(() => productCard.classList.remove('result-card-enter'), 400);
 
-  const bestItem = items.find(i => i.fiyatNum > 0) || items[0];
   document.getElementById('bestDepotName').textContent = bestItem.depot;
   if (otherDepotsTitle) otherDepotsTitle.textContent = 'DEPO TEKLIFLERI';
-  document.getElementById('bestPrice').textContent = '₺' + bestItem.fiyat;
+  document.getElementById('bestPrice').textContent = 'TL ' + bestItem.fiyat;
 
   const stockText = bestItem.stokVar
     ? (bestItem.stok > 0 && bestItem.stokGosterilsin ? bestItem.stok + ' Adet' : 'Stokta var')
@@ -825,7 +816,11 @@ function renderDetailResults(items, query) {
     bestLinkEl.style.display = 'none';
   }
 
-  updateBestOfferCard(items);
+  try {
+    updateBestOfferCard(items);
+  } catch (err) {
+    console.error('Best offer render failed:', err);
+  }
 
   bestPriceCard.style.display = 'block';
   bestPriceCard.classList.add('result-best-enter');
@@ -837,7 +832,10 @@ function renderDetailResults(items, query) {
     tableItems.forEach((item, idx) => {
       const tr = document.createElement('tr');
       const isBestRow = item === bestItem;
-      tr.className = 'stagger-enter stagger-delay-' + Math.min(idx, 9) + (isBestRow ? ' is-best' : '');
+      const isSelectedRow = getOfferSelectionKey(item) === currentSelectedOfferKey;
+      tr.className = 'stagger-enter stagger-delay-' + Math.min(idx, 9)
+        + (isBestRow ? ' is-best' : '')
+        + (isSelectedRow ? ' is-selected' : '');
       const isInStock = item.stokVar;
       const stockStr = isInStock
         ? (item.stok > 0 && item.stokGosterilsin ? item.stok + ' Adet' : 'Stokta var')
@@ -846,15 +844,17 @@ function renderDetailResults(items, query) {
       const depotBtnHtml = item.depotUrl
         ? `<button class="btn-depot-link" data-url="${esc(item.depotUrl)}" data-depot-id="${esc(item.depotId || '')}">Depoya Git <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7"/><path d="M7 7h10v10"/></svg></button>`
         : '';
+      const selectBtnHtml = `<button class="btn-plan-select ${isSelectedRow ? 'active' : ''}" data-offer-key="${esc(getOfferSelectionKey(item))}" aria-pressed="${isSelectedRow ? 'true' : 'false'}">${isSelectedRow ? 'Secili' : 'Plana Sec'}</button>`;
 
       tr.innerHTML = `
         <td>
           <div class="depot-name-cell">
-             <div class="depot-icon-sm">
+            <div class="depot-icon-sm">
                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
              </div>
             <span class="depot-name-text">${esc(item.depot)}</span>
-            ${isBestRow ? '<span class="depot-best-pill">Secilen Teklif</span>' : ''}
+            ${isSelectedRow ? '<span class="depot-selected-pill">Secili Siparis Deposu</span>' : ''}
+            ${isBestRow ? '<span class="depot-best-pill">En Ucuz Teklif</span>' : ''}
           </div>
         </td>
         <td>
@@ -866,13 +866,44 @@ function renderDetailResults(items, query) {
         <td>
           <span style="color:var(--accent);font-weight:600;font-size:13px;">${esc(item.malFazlasi)}</span>
         </td>
-         <td class="price-cell">₺${esc(item.fiyat)}</td>
-         <td>${depotBtnHtml}</td>
-       `;
+        <td class="price-cell">TL ${esc(item.fiyat)}</td>
+        <td>
+          <div class="depot-actions">
+            ${selectBtnHtml}
+            ${depotBtnHtml}
+          </div>
+        </td>
+      `;
+
+      tr.tabIndex = 0;
+      tr.setAttribute('role', 'button');
+      tr.setAttribute('aria-label', `${item.depot} deposunu siparis plani icin sec`);
+      tr.addEventListener('click', () => {
+        setSelectedOffer(item, items);
+        renderDetailResults(items, query);
+      });
+      tr.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setSelectedOffer(item, items);
+          renderDetailResults(items, query);
+        }
+      });
+
+
+      const selectBtn = tr.querySelector('.btn-plan-select');
+      if (selectBtn) {
+        selectBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          setSelectedOffer(item, items);
+          renderDetailResults(items, query);
+        });
+      }
 
       const btn = tr.querySelector('.btn-depot-link');
       if (btn) {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (event) => {
+          event.stopPropagation();
           copyAndOpenDepot(btn.dataset.url, btn.dataset.depotId);
         });
       }
@@ -897,6 +928,48 @@ function esc(str) {
   return d.innerHTML;
 }
 
+function exportOrderPlanCsv(plan) {
+  if (!plan || !plan.length) {
+    showToast('Disa aktarilacak plan yok');
+    return;
+  }
+
+  const csvEscape = (val) => {
+    const str = val == null ? '' : String(val);
+    return str.includes(',') || str.includes('"') || str.includes('\n')
+      ? `"${str.replace(/"/g, '""')}"`
+      : str;
+  };
+
+  const headers = ['Urun', 'Barkod', 'Depo', 'Adet', 'Birim Fiyat (TL)', 'Toplam (TL)', 'MF', 'Planlama'];
+  const rows = plan.map(item => [
+    item.name || '',
+    item.barcode || '',
+    item.depot || '',
+    item.desiredQty || 1,
+    item.effectiveUnit > 0 ? item.effectiveUnit.toFixed(2) : '',
+    item.totalCost > 0 ? item.totalCost.toFixed(2) : '',
+    item.mfStr || '',
+    item.planningMode === 'mf' ? 'MF' : 'Normal',
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(csvEscape).join(','))
+    .join('\r\n');
+
+  const bom = '\uFEFF'; // Excel UTF-8 BOM
+  const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const date = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `siparis-plani-${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Plan CSV olarak indirildi');
+}
+
 function getSearchIdentity(items, query) {
   const normalizedItems = dedupeSearchItems(items || [], query);
   const firstItem = normalizedItems?.[0] || items?.[0] || {};
@@ -916,83 +989,185 @@ function getSearchIdentity(items, query) {
   };
 }
 
-function getPlannerOption(items, qty, { useMf = false } = {}) {
-  const safeQty = Math.max(parseInt(qty, 10) || 1, 1);
-  const options = useMf ? calcMfOptions(items, safeQty) : [];
-  if (useMf && options.length > 0) {
-    return { qty: safeQty, option: options[0] };
+function refreshOrderPlanViews() {
+  renderHomeOrderPlan();
+  if (currentPage === 'order-plan') {
+    renderOrderPlanDetail();
   }
-
-  const bestItem = items
-    .filter(i => i.fiyatNum > 0)
-    .sort((a, b) => a.fiyatNum - b.fiyatNum)[0] || items[0];
-  if (!bestItem) return null;
-
-  return {
-    qty: safeQty,
-    option: {
-      depot: bestItem.depot,
-      depotId: bestItem.depotId,
-      depotUrl: bestItem.depotUrl,
-      mf: null,
-      mfStr: bestItem.malFazlasi || '',
-      orderQty: safeQty,
-      receiveQty: safeQty,
-      totalCost: safeQty * (bestItem.fiyatNum || 0),
-      effectiveUnit: bestItem.fiyatNum || 0,
-      unitPrice: bestItem.fiyatNum || 0,
-      ad: bestItem.ad,
-      planningMode: 'unit',
-    },
-  };
 }
 
-function updateSearchActionMeta() {
-  const productEl = document.getElementById('searchActionProduct');
-  if (!productEl || !currentDetailItems.length) return;
-  const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
-  productEl.textContent = identity.name || 'Seçili ürün';
-  return;
+function addPlannerOptionToOrderPlan(option, desiredQty, { toastLabel = '' } = {}) {
+  if (!option) return false;
 
-  const qty = _scActiveQty || 1;
-  const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
-  const planned = getPlannerOption(currentDetailItems, qty, { useMf: hasExplicitQty });
-  if (!planned || !planned.option) {
-    meta.textContent = 'Bu urunu siparis planina veya sabit ihtiyac listenize ekleyin.';
-    return;
+  const sourceItem = option.sourceItem || resolveSelectedOfferItem(currentDetailItems) || currentDetailItems[0] || null;
+  const sourceItems = currentDetailItems.length ? currentDetailItems : (sourceItem ? [sourceItem] : []);
+  const sourceQuery = currentDetailQuery || sourceItem?.barcode || sourceItem?.barkod || sourceItem?.ad || '';
+  const identity = getSearchIdentity(sourceItems, sourceQuery);
+  const barcode = String(identity.barcode || getItemBarcode(sourceItem, sourceQuery) || '').trim();
+  const requestedQty = Math.max(parseInt(desiredQty, 10) || 1, 1);
+
+  if (!isBarcodeQuery(barcode)) {
+    showToast('Plana eklemek icin gecerli barkod gerekli');
+    return false;
   }
 
-  if (!hasExplicitQty) {
-    const unitText = planned.option.effectiveUnit > 0
-      ? 'Birim fiyat: ₺' + planned.option.effectiveUnit.toFixed(2).replace('.', ',')
-      : 'Fiyat bilgisi bekleniyor';
-    meta.textContent = `Hizli oneride depo: ${planned.option.depot}. ${unitText}.`;
-    return;
+  const normalizedOption = {
+    ...option,
+    orderQty: Math.max(parseInt(option.orderQty, 10) || 0, 0),
+    receiveQty: Math.max(parseInt(option.receiveQty, 10) || 0, 0),
+    totalCost: Number(option.totalCost) || 0,
+    effectiveUnit: Number(option.effectiveUnit) || 0,
+    unitPrice: Number(option.unitPrice) || 0,
+  };
+  const effectiveUnit = normalizedOption.effectiveUnit
+    || normalizedOption.unitPrice
+    || (normalizedOption.orderQty > 0 ? normalizedOption.totalCost / normalizedOption.orderQty : 0);
+  const totalCost = effectiveUnit > 0
+    ? effectiveUnit * requestedQty
+    : (Number(normalizedOption.totalCost) || 0);
+
+  const nextEntry = normalizeOrderPlanItem({
+    key: barcode,
+    barcode,
+    query: barcode,
+    name: identity.name || normalizedOption.ad || sourceItem?.ad || 'Urun',
+    depot: normalizedOption.depot || sourceItem?.depot || '',
+    depotId: normalizedOption.depotId || sourceItem?.depotId || '',
+    depotUrl: normalizedOption.depotUrl || sourceItem?.depotUrl || '',
+    desiredQty: requestedQty,
+    orderQty: requestedQty,
+    receiveQty: requestedQty,
+    totalCost,
+    effectiveUnit,
+    unitPrice: normalizedOption.unitPrice || effectiveUnit || 0,
+    mfStr: normalizedOption.mfStr || '',
+    planningMode: normalizedOption.mf ? 'mf' : (normalizedOption.planningMode || 'unit'),
+    addedAt: new Date().toISOString(),
+  });
+
+  if (!nextEntry) {
+    showToast('Plan kaydi olusturulamadi');
+    return false;
   }
 
-  const totalText = planned.option.totalCost > 0
-    ? 'Toplam odeme: ₺' + planned.option.totalCost.toFixed(2).replace('.', ',')
-    : 'Fiyat bilgisi bekleniyor';
+  const plan = getOrderPlan().filter((item) => !(item.key === nextEntry.key && item.depot === nextEntry.depot));
+  plan.unshift(nextEntry);
+  saveOrderPlan(plan);
+  refreshOrderPlanViews();
+  showToast(toastLabel || `${nextEntry.name} siparis planina eklendi`);
+  return true;
+}
 
-  meta.textContent = `${planned.qty} birim icin onerilen depo: ${planned.option.depot}. ${totalText}.`;
+function getOfferSelectionKey(item) {
+  if (!item) return '';
+  return [
+    item.depotId || '',
+    item.depot || '',
+    item.depotUrl || '',
+    item.ad || '',
+    item.fiyat || '',
+  ].join('|');
+}
+
+function resolveSelectedOfferItem(items) {
+  if (!items || !items.length) return null;
+  return items.find((item) => getOfferSelectionKey(item) === currentSelectedOfferKey)
+    || items.find((item) => item.fiyatNum > 0)
+    || items[0]
+    || null;
+}
+
+function setSelectedOffer(item, items = currentDetailItems) {
+  const selectedItem = item || resolveSelectedOfferItem(items);
+  currentSelectedOfferKey = selectedItem ? getOfferSelectionKey(selectedItem) : '';
+}
+
+function removeOrderPlanItem(key, depot = '') {
+  const next = getOrderPlan().filter((item) => !(item.key === key && item.depot === depot));
+  saveOrderPlan(next);
+  refreshOrderPlanViews();
+}
+
+function getPlannerOption(items, qty, { useMf = false } = {}) {
+  const safeQty = Math.max(parseInt(qty, 10) || 1, 1);
+  const options = useMf ? calcMfOptions(items, safeQty) : buildUnitOptions(items, safeQty);
+  if (options.length > 0) {
+    return { qty: safeQty, option: options[0] };
+  }
+  return null;
+}
+
+function getDesiredPlanQty() {
+  const actionInput = document.getElementById('searchActionQtyInput');
+  const inputQty = parseInt(actionInput?.value, 10);
+  if (Number.isInteger(inputQty) && inputQty > 0) {
+    return inputQty;
+  }
+  return Math.max(parseInt(_scActiveQty, 10) || 1, 1);
+}
+
+function shouldUseMfForQty(qty) {
+  return Number.isInteger(qty) && qty > 1;
+}
+
+function syncSearchActionQtyInputs(desiredQty = getDesiredPlanQty()) {
+  const actionInput = document.getElementById('searchActionQtyInput');
+  const stockInput = document.getElementById('stockQtyInput');
+  const stockValue = shouldUseMfForQty(_scActiveQty) ? String(_scActiveQty) : '';
+
+  if (actionInput && actionInput.value !== String(desiredQty)) {
+    actionInput.value = String(desiredQty);
+  }
+  if (stockInput && stockInput.value !== stockValue) {
+    stockInput.value = stockValue;
+  }
+}
+
+function updateSearchActionQtyUi() {
+  const addBtnSub = document.getElementById('addToPlanBtnSub');
+  if (!addBtnSub) return;
+  const selectedItem = resolveSelectedOfferItem(currentDetailItems);
+  const depotText = selectedItem?.depot ? ` ${selectedItem.depot} deposundan` : '';
+  addBtnSub.textContent = `${getDesiredPlanQty()} adet${depotText} aktif plana eklenir`;
+}
+
+function setSearchActionQty(nextQty) {
+  const parsedQty = Math.max(parseInt(nextQty, 10) || 1, 1);
+  _scActiveQty = shouldUseMfForQty(parsedQty) ? parsedQty : null;
+  syncSearchActionQtyInputs(parsedQty);
+
+  if (_scItems.length && shouldUseMfForQty(parsedQty)) {
+    renderStockCalc(_scItems, parsedQty);
+  } else {
+    const calcResults = document.getElementById('stockCalcResults');
+    if (calcResults) calcResults.innerHTML = '';
+  }
+
+  document.querySelectorAll('.mf-chip').forEach((chip) => {
+    const chipQty = parseInt(chip.textContent, 10);
+    chip.classList.toggle('active', shouldUseMfForQty(parsedQty) && chipQty === parsedQty);
+  });
+
+  updateBestOfferCard(_scItems.length ? _scItems : currentDetailItems);
+  updateSearchActionMeta();
+  updateSearchActionQtyUi();
 }
 
 function renderSearchActionPanel(items, query) {
   const panel = document.getElementById('searchActionPanel');
   if (!panel) return;
   panel.style.display = items && items.length ? 'flex' : 'none';
+  syncSearchActionQtyInputs(getDesiredPlanQty());
+  updateSearchActionQtyUi();
   updateSearchActionMeta();
-}
-
-function formatCurrency(value) {
-  return '₺' + Number(value || 0).toFixed(2).replace('.', ',');
 }
 
 function getActiveBestSelection(items) {
   if (!items || !items.length) return null;
 
-  const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
-  const planned = getPlannerOption(items, _scActiveQty || 1, { useMf: hasExplicitQty });
+  const desiredQty = getDesiredPlanQty();
+  const hasExplicitQty = shouldUseMfForQty(desiredQty);
+  const planned = getPlannerOption(items, desiredQty, { useMf: hasExplicitQty });
   if (!planned || !planned.option) return null;
 
   const option = planned.option;
@@ -1083,49 +1258,50 @@ function updateBestOfferCard(items) {
 function updateSearchActionMeta() {
   const productEl = document.getElementById('searchActionProduct');
   if (!productEl || !currentDetailItems.length) return;
-
   const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
-  productEl.textContent = identity.name || 'Seçili ürün';
-  return;
-
-  const qty = _scActiveQty || 1;
-  const hasExplicitQty = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
-  const planned = getPlannerOption(currentDetailItems, qty, { useMf: hasExplicitQty });
-
-  if (!planned || !planned.option) {
-    meta.textContent = 'En uygun depo ve maliyet bilgisi hesaplanamadi. Urunu yine de planiniza veya sabit listenize ekleyebilirsiniz.';
-    return;
-  }
-
-  if (!hasExplicitQty) {
-    const unitText = planned.option.effectiveUnit > 0
-      ? 'Birim fiyat ' + formatCurrency(planned.option.effectiveUnit)
-      : 'Fiyat bilgisi bekleniyor';
-    meta.textContent = `${planned.option.depot} su an en mantikli gorunen depo. ${unitText}; plan eklerseniz bu secim kaydedilir.`;
-    return;
-  }
-
-  const totalText = planned.option.totalCost > 0
-    ? 'Toplam odeme ' + formatCurrency(planned.option.totalCost)
-    : 'Fiyat bilgisi bekleniyor';
-
-  meta.textContent = `${planned.qty} birim icin ${planned.option.depot} oneriliyor. ${totalText}; siparis planina eklediginizde bu miktar korunur.`;
+  const selectedItem = resolveSelectedOfferItem(currentDetailItems);
+  const depotSuffix = selectedItem?.depot ? ` (${selectedItem.depot})` : '';
+  productEl.textContent = (identity.name || 'Secili urun') + depotSuffix;
 }
 
-// ═══════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 // STOCK CALCULATOR
-// ═══════════════════════════════════════════════════
+// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 let _scItems = [];
 let _scActiveQty = null;
+let _scQuoteVersion = 0;
+const _scQuoteCache = new Map();
 
-function parseMf(mfStr) {
-  if (!mfStr) return null;
-  const m = String(mfStr).match(/(\d+)\s*\+\s*(\d+)/);
-  if (!m) return null;
-  const buy = parseInt(m[1], 10);
-  const free = parseInt(m[2], 10);
-  if (buy <= 0 || free <= 0) return null;
-  return { buy, free, total: buy + free };
+function buildUnitOptions(items, targetQty = 1) {
+  const safeQty = Math.max(parseInt(targetQty, 10) || 1, 1);
+  const allOptions = items
+    .filter(i => i.fiyatNum > 0)
+    .map(item => ({
+      depot: item.depot,
+      depotId: item.depotId,
+      depotUrl: item.depotUrl,
+      mf: null,
+      mfStr: '',
+      orderQty: safeQty,
+      receiveQty: safeQty,
+      totalCost: safeQty * item.fiyatNum,
+      effectiveUnit: item.fiyatNum,
+      unitPrice: item.fiyatNum,
+      availableMfStr: item.malFazlasi || '',
+      ad: item.ad,
+      sourceItem: item,
+      pricingMode: 'unit',
+    }));
+
+  const bestPerDepot = new Map();
+  allOptions.forEach(opt => {
+    const key = opt.depot;
+    if (!bestPerDepot.has(key) || opt.effectiveUnit < bestPerDepot.get(key).effectiveUnit) {
+      bestPerDepot.set(key, opt);
+    }
+  });
+
+  return Array.from(bestPerDepot.values()).sort((a, b) => a.effectiveUnit - b.effectiveUnit);
 }
 
 function calcMfOptions(items, targetQty) {
@@ -1144,10 +1320,32 @@ function calcMfOptions(items, targetQty) {
           mfStr: '',
           orderQty: targetQty,
           receiveQty: targetQty,
+        totalCost: targetQty * unitPrice,
+        effectiveUnit: unitPrice,
+        unitPrice,
+        availableMfStr: item.malFazlasi || '',
+        ad: item.ad,
+        sourceItem: item,
+      };
+      }
+
+      // Hedef miktar bir MF batchi dolduramiyorsa (orn: 3 adet icin MF 19+1)
+      // MF zorla uygulanmaz - unit fiyatiyla hesaplanir, MF 'mevcut' olarak gosterilir.
+      if (targetQty < mf.total) {
+        return {
+          depot: item.depot,
+          depotId: item.depotId,
+          depotUrl: item.depotUrl,
+          mf: null,
+          mfStr: '',
+          orderQty: targetQty,
+          receiveQty: targetQty,
           totalCost: targetQty * unitPrice,
           effectiveUnit: unitPrice,
           unitPrice,
+          availableMfStr: item.malFazlasi || '',
           ad: item.ad,
+          sourceItem: item,
         };
       }
 
@@ -1166,7 +1364,9 @@ function calcMfOptions(items, targetQty) {
         totalCost: orderQty * unitPrice,
         effectiveUnit: (orderQty * unitPrice) / receiveQty,
         unitPrice,
+        availableMfStr: item.malFazlasi || '',
         ad: item.ad,
+        sourceItem: item,
       };
     });
 
@@ -1181,6 +1381,110 @@ function calcMfOptions(items, targetQty) {
   return Array.from(bestPerDepot.values()).sort((a, b) => a.effectiveUnit - b.effectiveUnit);
 }
 
+function getFallbackPlannerOptions(items, targetQty) {
+  const safeQty = Math.max(parseInt(targetQty, 10) || 1, 1);
+  return shouldUseMfForQty(safeQty)
+    ? calcMfOptions(items, safeQty)
+    : buildUnitOptions(items, safeQty);
+}
+
+function getPlannerOptionDetailText(option, requestedQty) {
+  const safeQty = Math.max(parseInt(requestedQty, 10) || 1, 1);
+  const availableMf = option.availableMfStr || option.mfStr || '';
+  const hasAppliedMf = safeQty > 1 && option.mfStr && (option.receiveQty > option.orderQty || !!option.mf);
+
+  if (hasAppliedMf) {
+    return `MF ${option.mfStr} · ${option.orderQty} al ${option.receiveQty} gel`;
+  }
+  if (availableMf) {
+    return `MF ${availableMf}`;
+  }
+  return `${option.orderQty} adet`;
+}
+
+function getBulkOfferDetailText(option, requestedQty) {
+  const safeQty = Math.max(parseInt(requestedQty, 10) || 1, 1);
+  const availableMf = option.availableMfStr || option.mfStr || '';
+  if (!shouldUseMfForQty(safeQty)) {
+    return availableMf ? `MF ${availableMf}` : `${safeQty} adet`;
+  }
+  if (availableMf) {
+    return `Hedef ${safeQty} adet · MF ${availableMf}`;
+  }
+  return `Hedef ${safeQty} adet`;
+}
+
+function buildQuoteCacheKey(item, option, targetQty) {
+  return [
+    item?.depotId || '',
+    item?.kodu || item?.barcode || item?.ad || '',
+    option?.mfStr || '',
+    option?.orderQty || '',
+    option?.receiveQty || '',
+    targetQty || '',
+  ].join('::');
+}
+
+async function fetchQuotedOption(item, option, targetQty) {
+  if (!item?.depotId) return option;
+
+  const cacheKey = buildQuoteCacheKey(item, option, targetQty);
+  if (_scQuoteCache.has(cacheKey)) {
+    return _scQuoteCache.get(cacheKey);
+  }
+
+  try {
+    const res = await authFetch(API_BASE + '/api/quote-option', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        depotId: item.depotId,
+        item,
+        option,
+        targetQty,
+      }),
+    });
+    const data = await res.json();
+    if (data?.success && data.quote) {
+      const quoted = {
+        ...option,
+        ...data.quote,
+        sourceItem: item,
+      };
+      _scQuoteCache.set(cacheKey, quoted);
+      return quoted;
+    }
+  } catch {}
+
+  return option;
+}
+
+// Max 2 quote istegi esanli gider - backend ve agi yormuyor
+const QUOTE_CONCURRENCY_LIMIT = 2;
+
+// NOT: Global _activeQuoteId kaldirildi - paralel bulk kart cagrilari birbirini
+// iptal ediyordu. Her caller kendi version tracking'ini kullaniyor:
+// renderStockCalc -> _scQuoteVersion, refreshQuotes -> state.quoteVersion
+async function resolveQuotedOptions(items, targetQty) {
+  const baseOptions = calcMfOptions(items, targetQty);
+  if (!baseOptions.length) return [];
+
+  // Her option icin factory fonksiyon olustur (lazy evaluation)
+  const tasks = baseOptions.map((option) => () => fetchQuotedOption(option.sourceItem, option, targetQty));
+
+  // Max QUOTE_CONCURRENCY_LIMIT kadar paralel, sirasyla calistir
+  const quoted = await runConcurrent(tasks, QUOTE_CONCURRENCY_LIMIT);
+
+  return quoted.sort((a, b) => a.effectiveUnit - b.effectiveUnit);
+}
+
+async function resolvePlannerOptions(items, targetQty) {
+  const safeQty = Math.max(parseInt(targetQty, 10) || 1, 1);
+  if (!shouldUseMfForQty(safeQty)) {
+    return buildUnitOptions(items, safeQty);
+  }
+  return resolveQuotedOptions(items, safeQty);
+}
 function buildMfChips(items) {
   const chipsContainer = document.getElementById('stockMfChips');
   chipsContainer.innerHTML = '';
@@ -1219,30 +1523,23 @@ function buildMfChips(items) {
     chip.className = 'mf-chip';
     const isBest = s.qty === bestQty;
     let label = `${s.qty}`;
-    let sub = `<span class="mf-chip-label">${s.buy} al → ${s.qty}</span>`;
-    if (isBest) sub += ` <span class="mf-chip-best">★ en uygun</span>`;
+    let sub = `<span class="mf-chip-label">${s.buy} al -> ${s.qty}</span>`;
+    if (isBest) sub += ` <span class="mf-chip-best">en uygun</span>`;
     chip.innerHTML = label + ' ' + sub;
     chip.addEventListener('click', () => {
       document.getElementById('stockQtyInput').value = s.qty;
-      _scActiveQty = s.qty;
       document.querySelectorAll('.mf-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      renderStockCalc(items, s.qty);
+      setSearchActionQty(s.qty);
     });
     chipsContainer.appendChild(chip);
   });
 }
 
-function renderStockCalc(items, qty) {
-  const container = document.getElementById('stockCalcResults');
-  if (!qty || qty <= 0) {
-    container.innerHTML = '';
-    return;
-  }
-
-  const options = calcMfOptions(items, qty);
-  if (options.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-3); font-size:13px;">Fiyat verisi bulunamadı.</div>';
+function renderStockCalcOptions(container, options, qty) {
+  if (!container) return;
+  if (!options.length) {
+    container.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-3); font-size:13px;">Fiyat verisi bulunamadi.</div>';
     return;
   }
 
@@ -1254,30 +1551,91 @@ function renderStockCalc(items, qty) {
       : 0;
 
     const mfDetail = opt.mf
-      ? `MF <strong>${opt.mfStr}</strong> · ${opt.orderQty} al → ${opt.receiveQty} gel`
-      : `Kampanyasız · ${opt.orderQty} adet`;
+      ? `MF <strong>${opt.mfStr}</strong> - ${opt.orderQty} al -> ${opt.receiveQty} gel`
+      : `Kampanyasiz - ${opt.orderQty} adet`;
+
+    const liveBadge = opt.pricingMode === 'live'
+      ? '<div class="sc-live-badge">Canli fiyat</div>'
+      : '';
 
     return `
-      <div class="sc-row ${isBest ? 'sc-best' : ''}">
+      <div class="sc-row sc-row-clickable ${isBest ? 'sc-best' : ''}" data-sc-option-index="${idx}" tabindex="0" role="button">
         <div class="sc-rank">${idx + 1}</div>
         <div class="sc-depot">
-          <div class="sc-depot-name">${esc(opt.depot)}</div>
+          <div class="sc-depot-name sc-depot-link" data-depot-url="${esc(opt.depotUrl || '')}" data-depot-id="${esc(opt.depotId || '')}" title="Depoya git">${esc(opt.depot)}</div>
           <div class="sc-depot-detail">${mfDetail}</div>
         </div>
         <div class="sc-prices">
           ${isBest ? '<div class="sc-best-badge">EN UYGUN</div>' : ''}
-          <div class="sc-unit-price">₺${opt.effectiveUnit.toFixed(2).replace('.', ',')}</div>
-          <div class="sc-total-price">Toplam: ₺${opt.totalCost.toFixed(2).replace('.', ',')}</div>
-          ${!isBest && saving > 0 ? `<div class="sc-saving">1. sıra %${saving} daha ucuz</div>` : ''}
+          ${liveBadge}
+          <div class="sc-unit-price">TL ${opt.effectiveUnit.toFixed(2).replace('.', ',')}</div>
+          <div class="sc-total-price">Toplam: TL ${opt.totalCost.toFixed(2).replace('.', ',')}</div>
+          ${!isBest && saving > 0 ? `<div class="sc-saving">1. sira %${saving} daha ucuz</div>` : ''}
         </div>
       </div>
     `;
   }).join('');
+
+  container.querySelectorAll('[data-sc-option-index]').forEach((row) => {
+    const option = options[parseInt(row.dataset.scOptionIndex, 10)];
+    const addRowOption = async () => {
+      if (!option) return;
+      const quotedOption = await fetchQuotedOption(option.sourceItem, option, qty);
+      addPlannerOptionToOrderPlan(quotedOption || option, qty, { toastLabel: `${option.depot} siparis planina eklendi` });
+    };
+    row.addEventListener('click', addRowOption);
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        addRowOption();
+      }
+    });
+  });
+
+  container.querySelectorAll('.sc-depot-link').forEach((nameEl) => {
+    if (!nameEl.dataset.depotUrl) return;
+    nameEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyAndOpenDepot(nameEl.dataset.depotUrl, nameEl.dataset.depotId);
+    });
+  });
+}
+
+async function renderStockCalc(items, qty) {
+  const container = document.getElementById('stockCalcResults');
+  if (!qty || qty <= 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const requestVersion = ++_scQuoteVersion;
+  const fallbackOptions = calcMfOptions(items, qty);
+  renderStockCalcOptions(container, fallbackOptions, qty);
+
+  resolveQuotedOptions(items, qty)
+    .then((quotedOptions) => {
+      if (requestVersion !== _scQuoteVersion) return;
+      if (!quotedOptions.length) return;
+
+      const hasLiveChanges = quotedOptions.some((opt, idx) => {
+        const base = fallbackOptions[idx];
+        if (!base) return true;
+        return Math.abs((opt.totalCost || 0) - (base.totalCost || 0)) > 0.01
+          || Math.abs((opt.effectiveUnit || 0) - (base.effectiveUnit || 0)) > 0.01
+          || (opt.pricingMode || '') !== (base.pricingMode || '');
+      });
+
+      if (hasLiveChanges) {
+        renderStockCalcOptions(container, quotedOptions, qty);
+      }
+    })
+    .catch(() => {});
 }
 
 function initStockCalc(items) {
   _scItems = items;
   _scActiveQty = null;
+  _scQuoteCache.clear();
 
   const trigger = document.getElementById('stockCalcTrigger');
   const panel = document.getElementById('stockCalcPanel');
@@ -1292,6 +1650,8 @@ function initStockCalc(items) {
   input.value = '';
   results.innerHTML = '';
   buildMfChips(items);
+  syncSearchActionQtyInputs(1);
+  updateSearchActionQtyUi();
   updateBestOfferCard(items);
   updateSearchActionMeta();
 }
@@ -1322,19 +1682,14 @@ function toggleStockCalc() {
   function triggerCalc() {
     const val = parseInt(input.value, 10);
     if (val > 0) {
-      _scActiveQty = val;
-      document.querySelectorAll('.mf-chip').forEach(c => {
-        const chipQty = parseInt(c.textContent, 10);
-        c.classList.toggle('active', chipQty === val);
-      });
-      renderStockCalc(_scItems, val);
+      setSearchActionQty(val);
     } else {
       _scActiveQty = null;
       document.getElementById('stockCalcResults').innerHTML = '';
       document.querySelectorAll('.mf-chip').forEach(c => c.classList.remove('active'));
+      syncSearchActionQtyInputs();
+      updateSearchActionQtyUi();
     }
-    updateBestOfferCard(_scItems);
-    updateSearchActionMeta();
   }
 
   trigger.addEventListener('click', toggleStockCalc);
@@ -1364,24 +1719,113 @@ function toggleStockCalc() {
   });
 })();
 
-// ── Depoya Git — open in depot panel ──
+(function setupSearchActionQtyEvents() {
+  const input = document.getElementById('searchActionQtyInput');
+  const minus = document.getElementById('searchActionQtyMinus');
+  const plus = document.getElementById('searchActionQtyPlus');
+  if (!input || !minus || !plus) return;
+
+  let debounce = null;
+
+  function applyQty(nextQty) {
+    clearTimeout(debounce);
+    setSearchActionQty(nextQty);
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => applyQty(input.value), 200);
+  });
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyQty(input.value);
+    }
+  });
+
+  minus.addEventListener('click', () => {
+    const nextQty = Math.max((parseInt(input.value, 10) || 1) - 1, 1);
+    applyQty(nextQty);
+  });
+
+  plus.addEventListener('click', () => {
+    const nextQty = Math.max(parseInt(input.value, 10) || 1, 1) + 1;
+    applyQty(nextQty);
+  });
+})();
+
+// Ã¢â€â‚¬Ã¢â€â‚¬ Depoya Git Ã¢â‚¬â€ open in depot panel Ã¢â€â‚¬Ã¢â€â‚¬
+function buildChromeDepotTarget(depotId, rawQuery, fallbackUrl) {
+  const query = String(rawQuery || '').trim();
+  const cleanBarcode = parseQRCode(query);
+  const normalizedQuery = cleanBarcode && cleanBarcode.length === 13 ? cleanBarcode : query;
+
+  if (depotId === 'anadolu-pharma' && normalizedQuery) {
+    return {
+      url: `https://b2b.anadolupharma.com/UrunAra/1?search=${encodeURIComponent(normalizedQuery)}`,
+      copyText: normalizedQuery,
+    };
+  }
+
+  if (depotId === 'anadolu-itriyat' && normalizedQuery) {
+    return {
+      url: `https://b4b.anadoluitriyat.com/Search?text=${encodeURIComponent(normalizedQuery)}`,
+      copyText: normalizedQuery,
+    };
+  }
+
+  if (depotId === 'selcuk' && normalizedQuery) {
+    return {
+      url: `https://webdepo.selcukecza.com.tr/Siparis/hizlisiparis.aspx?ilcAdi=${encodeURIComponent(normalizedQuery)}`,
+      copyText: normalizedQuery,
+    };
+  }
+
+  if (depotId === 'nevzat' && normalizedQuery) {
+    return {
+      url: `http://webdepo.nevzatecza.com.tr/Siparis/hizlisiparis.aspx?ilcAdi=${encodeURIComponent(normalizedQuery)}`,
+      copyText: normalizedQuery,
+    };
+  }
+
+  if (depotId === 'sentez' && normalizedQuery) {
+    return {
+      url: `https://www.sentezb2b.com/tr-TR/Site/Liste?tip=Arama&arama=${encodeURIComponent(normalizedQuery)}&s=a`,
+      copyText: normalizedQuery,
+    };
+  }
+
+  return {
+    url: depotId === 'alliance'
+      ? 'https://esiparisv2.alliance-healthcare.com.tr/Sales/QuickOrder'
+      : fallbackUrl,
+    copyText: normalizedQuery,
+  };
+}
+
 function copyAndOpenDepot(url, depotId) {
-  const textToCopy = selectedBarcode
+  const rawQuery = selectedBarcode
     || document.getElementById('searchInput').value.trim()
     || '';
+  const target = buildChromeDepotTarget(depotId, rawQuery, url);
+  const textToCopy = target.copyText || '';
 
   if (textToCopy) {
     navigator.clipboard.writeText(textToCopy).then(() => {
-      showToast('"' + textToCopy + '" kopyalandı');
+      showToast('"' + textToCopy + '" kopyalandÃ„Â±');
     }).catch(() => {});
   }
 
-  if (window.electronAPI && typeof openDepotPanel === 'function') {
-    openDepotPanel(url, depotId, textToCopy);
+  if (window.electronAPI?.openUrlInChrome) {
+    window.electronAPI.openUrlInChrome(target.url).catch(() => {
+      window.open(target.url, '_blank');
+    });
   } else {
-    window.open(url, '_blank');
+    window.open(target.url, '_blank');
   }
 }
+
 
 function showToast(msg) {
   const toast = document.getElementById('toast');
@@ -1391,7 +1835,7 @@ function showToast(msg) {
   toast._timer = setTimeout(() => toast.classList.remove('show'), 4000);
 }
 
-// ── Autocomplete ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Autocomplete Ã¢â€â‚¬Ã¢â€â‚¬
 function setupAutocomplete(inputId, suggestionsId, onSelect) {
   const input = document.getElementById(inputId);
   const dropdown = document.getElementById(suggestionsId);
@@ -1419,7 +1863,7 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
       const selDrugName = document.getElementById('selectedDrugName');
       const selDrugCode = document.getElementById('selectedDrugCode');
       if (selDrugName && selDrugCode) {
-        selDrugName.textContent = 'Barkod Taraması';
+        selDrugName.textContent = 'Barkod TaramasÃ„Â±';
         selDrugCode.textContent = 'Barkod: ' + q;
         document.getElementById('selectedDrug').style.display = 'flex';
       }
@@ -1438,17 +1882,17 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
     if (abortController) abortController.abort();
     abortController = new AbortController();
 
-    dropdown.innerHTML = '<div class="suggestion-loading">Aranıyor...</div>';
+    dropdown.innerHTML = '<div class="suggestion-loading">AranÃ„Â±yor...</div>';
     dropdown.classList.add('open');
 
     try {
-      const res = await fetch(API_BASE + '/api/autocomplete?q=' + encodeURIComponent(q), {
+      const res = await authFetch(API_BASE + '/api/autocomplete?q=' + encodeURIComponent(q), {
         signal: abortController.signal,
       });
       const data = await res.json();
 
       if (!data.suggestions || data.suggestions.length === 0) {
-        dropdown.innerHTML = '<div class="suggestion-loading">Sonuç bulunamadı</div>';
+        dropdown.innerHTML = '<div class="suggestion-loading">SonuÃƒÂ§ bulunamadÃ„Â±</div>';
         return;
       }
 
@@ -1465,7 +1909,7 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
           <span class="suggestion-name">${highlighted}</span>
           <span class="suggestion-meta">
             ${barcode ? '<span class="suggestion-code">' + esc(barcode) + '</span>' : ''}
-            <span class="suggestion-price">₺${esc(item.fiyat)}</span>
+            <span class="suggestion-price">TL ${esc(item.fiyat)}</span>
           </span>
         `;
         div.addEventListener('click', () => {
@@ -1484,7 +1928,7 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        dropdown.innerHTML = '<div class="suggestion-loading">Hata oluştu</div>';
+        dropdown.innerHTML = '<div class="suggestion-loading">Hata oluÃ…Å¸tu</div>';
       }
     }
   }
@@ -1548,7 +1992,7 @@ function onDrugSelected(item) {
 setupAutocomplete('homeSearchInput', 'homeSuggestions', onDrugSelected);
 setupAutocomplete('searchInput', 'searchSuggestions', onDrugSelected);
 
-// ── Depot status ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ Depot status Ã¢â€â‚¬Ã¢â€â‚¬
 const DEPOT_LIST = [
   { id: 'selcuk', name: 'Selçuk Ecza' },
   { id: 'nevzat', name: 'Nevzat Ecza' },
@@ -1563,7 +2007,7 @@ let safeCreds = {};
 
 async function loadDepotStatus() {
   try {
-    const res = await fetch(API_BASE + '/api/config');
+    const res = await authFetch(API_BASE + '/api/config');
     cachedConfig = await res.json();
 
     safeCreds = {};
@@ -1597,17 +2041,40 @@ async function loadDepotStatus() {
       dot.title = d.name + (connected ? ' (Bağlı)' : ' (Bağlı değil)');
       navDepots.appendChild(dot);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('Depot status load failed:', e);
+    cachedConfig = { depots: {} };
+  }
 }
 
-loadDepotStatus();
+// Ã¢â€â‚¬Ã¢â€â‚¬ App Init (auth guard) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
-// ── Settings ──
+async function initApp() {
+  const authed = await requireAuthOrRedirect();
+  if (!authed) return;
+
+  // Profil adÃ„Â±nÃ„Â± kullanÃ„Â±cÃ„Â±dan al
+  const currentUser = getUser();
+  if (currentUser?.displayName) {
+    const nameEl   = document.querySelector('.profile-name');
+    const avatarEl = document.querySelector('.profile-avatar');
+    if (nameEl)   nameEl.textContent   = currentUser.displayName;
+    if (avatarEl) avatarEl.textContent = currentUser.displayName[0].toUpperCase();
+  }
+
+  await loadDepotStatus();
+  applyHumanUiCopy();
+  renderHomeDashboard();
+}
+
+initApp();
+
+// Ã¢â€â‚¬Ã¢â€â‚¬ Settings Ã¢â€â‚¬Ã¢â€â‚¬
 const DEPOT_FORMS = {
   selcuk: {
     name: 'Selçuk Ecza Deposu',
     fields: [
-      { id: 'hesapKodu', label: 'Hesap Kodu', placeholder: 'ör: 1201800051' },
+      { id: 'hesapKodu', label: 'Hesap Kodu', placeholder: 'ÃƒÂ¶r: 1201800051' },
       { id: 'kullaniciAdi', label: 'Kullanıcı Adı', placeholder: 'ör: sel1510038608' },
       { id: 'sifre', label: 'Şifre', placeholder: 'Depot şifreniz', type: 'password' },
     ],
@@ -1664,6 +2131,61 @@ function renderSettings() {
   const container = document.getElementById('settingsContainer');
   container.innerHTML = '';
 
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Uygulama Bilgi KartÃ„Â± Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  const appCard = document.createElement('div');
+  appCard.className = 'app-info-card';
+  appCard.innerHTML = `
+    <div class="app-info-header">
+      <span class="app-info-title">Uygulama</span>
+      <span class="app-version" id="appVersionLabel">Sürüm yükleniyor...</span>
+    </div>
+    <div class="app-update-row">
+      <span class="app-update-status" id="appUpdateStatus">-</span>
+      <button class="btn-check-update" id="btnCheckUpdate" onclick="triggerUpdateCheck()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Güncelleme Kontrol Et
+      </button>
+    </div>`;
+  container.appendChild(appCard);
+
+  // SÃƒÂ¼rÃƒÂ¼mÃƒÂ¼ async yÃƒÂ¼kle
+  (async () => {
+    const versionLabel = document.getElementById('appVersionLabel');
+    const updateStatus = document.getElementById('appUpdateStatus');
+    const checkBtn     = document.getElementById('btnCheckUpdate');
+    if (window.electronAPI?.getAppVersion) {
+      const v = await window.electronAPI.getAppVersion();
+      if (versionLabel) versionLabel.innerHTML = `Sürüm: <strong>v${v}</strong>`;
+      // GÃƒÂ¼ncelleme event'lerini dinle
+      window.electronAPI.onUpdateStatus((payload) => {
+        if (!updateStatus || !checkBtn) return;
+        checkBtn.disabled = false;
+        updateStatus.className = 'app-update-status';
+        const msgs = {
+          checking:          ['active',  'Kontrol ediliyor...'],
+          available:         ['active',  `Yeni sürüm: v${payload.version || '?'} - indiriliyor`],
+          downloading:       ['active',  `İndiriliyor... %${Math.round(payload.percent || 0)}`],
+          downloaded:        ['ok',      'Güncelleme hazır - uygulama kapanınca kurulacak'],
+          'up-to-date':      ['ok',      `Güncel (v${payload.version || v})`],
+          error:             ['error',   'Güncelleme kontrolü başarısız'],
+          'dev-mode':        ['',        'Geliştirici modu - güncelleme devre dışı'],
+          'already-checking':['active',  'Zaten kontrol ediliyor...'],
+          'already-downloaded':['ok',   'Güncelleme zaten indirildi'],
+        };
+        const [cls, text] = msgs[payload.phase] || ['', payload.phase];
+        if (cls) updateStatus.classList.add(cls);
+        updateStatus.textContent = text;
+        if (payload.phase === 'checking' || payload.phase === 'downloading') {
+          checkBtn.disabled = true;
+        }
+      });
+    } else {
+      if (versionLabel) versionLabel.textContent = 'Web modu';
+      if (checkBtn) checkBtn.disabled = true;
+      if (updateStatus) updateStatus.textContent = 'Güncelleme yalnızca Electron uygulamasında çalışır';
+    }
+  })();
+
   for (const [depotId, form] of Object.entries(DEPOT_FORMS)) {
     const depotInfo = cachedConfig?.depots?.[depotId];
     const isConfigured = depotInfo && (depotInfo.hasCredentials || depotInfo.hasCookies || depotInfo.hasToken);
@@ -1687,9 +2209,9 @@ function renderSettings() {
       extraHtml += `
         <hr class="divider" />
         <div class="form-group">
-          <label>Manuel Cookie (opsiyonel — DevTools cookie'si yapıştır)</label>
+          <label>Manuel Cookie (opsiyonel - DevTools cookie'si yapıştır)</label>
           <textarea id="${depotId}-cookies" placeholder="Cookie string..."></textarea>
-          <div class="hint">Chrome DevTools → Application → Cookies</div>
+          <div class="hint">Chrome DevTools -> Application -> Cookies</div>
         </div>
       `;
     }
@@ -1699,7 +2221,7 @@ function renderSettings() {
         <div class="form-group">
           <label>Manuel JWT Token (opsiyonel)</label>
           <textarea id="${depotId}-token" placeholder="eyJ..."></textarea>
-          <div class="hint">Chrome DevTools → Network → Authorization header'dan kopyalayın</div>
+          <div class="hint">Chrome DevTools -> Network -> Authorization header'dan kopyalayın</div>
         </div>
       `;
     }
@@ -1727,6 +2249,23 @@ function renderSettings() {
   }
 }
 
+async function triggerUpdateCheck() {
+  const btn    = document.getElementById('btnCheckUpdate');
+  const status = document.getElementById('appUpdateStatus');
+  if (!window.electronAPI?.checkForUpdates) return;
+  if (btn) btn.disabled = true;
+  if (status) { status.className = 'app-update-status active'; status.textContent = 'Kontrol ediliyor...'; }
+  const result = await window.electronAPI.checkForUpdates();
+  // SonuÃƒÂ§ event olarak da gelir (onUpdateStatus), ama anlÃ„Â±k geri dÃƒÂ¶nÃƒÂ¼Ã…Å¸ iÃƒÂ§in de gÃƒÂ¶ster
+  if (result?.status === 'dev-mode') {
+    if (btn) btn.disabled = true;
+    if (status) { status.className = 'app-update-status'; status.textContent = 'Geliştirici modu - güncelleme devre dışı'; }
+  } else if (result?.status === 'already-downloaded') {
+    if (btn) btn.disabled = false;
+    if (status) { status.className = 'app-update-status ok'; status.textContent = 'Güncelleme zaten indirildi'; }
+  }
+}
+
 async function testDepotLogin(depotId) {
   const statusEl = document.getElementById(depotId + '-status');
   statusEl.textContent = 'Giriş deneniyor...';
@@ -1739,7 +2278,7 @@ async function testDepotLogin(depotId) {
   });
 
   try {
-    const res = await fetch(API_BASE + '/api/test-login', {
+    const res = await authFetch(API_BASE + '/api/test-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ depotId, credentials }),
@@ -1751,12 +2290,12 @@ async function testDepotLogin(depotId) {
       renderSettings();
       const newStatusEl = document.getElementById(depotId + '-status');
       if (newStatusEl) {
-        newStatusEl.textContent = 'Giriş başarılı!';
+        newStatusEl.textContent = 'GiriÃ…Å¸ baÃ…Å¸arÃ„Â±lÃ„Â±!';
         newStatusEl.className = 'action-status success';
         setTimeout(() => { newStatusEl.textContent = ''; newStatusEl.className = 'action-status'; }, 3000);
       }
     } else {
-      statusEl.textContent = data.error || 'Giriş başarısız';
+      statusEl.textContent = data.error || 'GiriÃ…Å¸ baÃ…Å¸arÃ„Â±sÃ„Â±z';
       statusEl.className = 'action-status fail';
     }
   } catch (err) {
@@ -1785,7 +2324,7 @@ async function saveDepot(depotId) {
   }
 
   try {
-    const res = await fetch(API_BASE + '/api/config/depot', {
+    const res = await authFetch(API_BASE + '/api/config/depot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1809,74 +2348,52 @@ async function saveDepot(depotId) {
 
 async function deleteDepot(depotId) {
   try {
-    await fetch(API_BASE + '/api/config/depot/' + depotId, { method: 'DELETE' });
+    await authFetch(API_BASE + '/api/config/depot/' + depotId, { method: 'DELETE' });
     await loadDepotStatus();
     renderSettings();
   } catch (e) {}
 }
 
-// ── Eczaci workflow helpers ──
-function addCurrentToOrderPlan() {
-  if (!currentDetailItems.length) return;
+// Ã¢â€â‚¬Ã¢â€â‚¬ Eczaci workflow helpers Ã¢â€â‚¬Ã¢â€â‚¬
+async function addCurrentToOrderPlan() {
+  try {
+    if (!currentDetailItems.length) {
+      showToast('Plana eklemek icin once bir urun secin');
+      return;
+    }
+    const desiredQty = getDesiredPlanQty();
+    const selectedItem = resolveSelectedOfferItem(currentDetailItems);
+    if (!selectedItem) {
+      showToast('Secili depo bulunamadi');
+      return;
+    }
+    const useMfPlanning = shouldUseMfForQty(desiredQty);
+    const planned = getPlannerOption([selectedItem], desiredQty, { useMf: useMfPlanning });
+    if (!planned || !planned.option) {
+      showToast('Plan secenegi olusturulamadi');
+      return;
+    }
 
-  const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
-  if (!isBarcodeQuery(identity.barcode || '')) {
-    showToast('Siparis plani icin barkod gerekli');
-    return;
+    const quotedOption = await fetchQuotedOption(selectedItem, planned.option, desiredQty);
+    addPlannerOptionToOrderPlan(quotedOption || planned.option, planned.qty, {
+      toastLabel: `${selectedItem.ad || 'Urun'} siparis planina eklendi`,
+    });
+  } catch (err) {
+    console.error('addCurrentToOrderPlan failed:', err);
+    showToast('Siparis planina eklenemedi');
   }
-  const useMfPlanning = Number.isInteger(_scActiveQty) && _scActiveQty > 0;
-  const planned = getPlannerOption(currentDetailItems, _scActiveQty || 1, { useMf: useMfPlanning });
-  if (!planned || !planned.option) return;
-
-  const plan = getOrderPlan();
-  const existingIndex = plan.findIndex(item => item.key === identity.key && item.depot === planned.option.depot);
-  const nextQty = planned.qty + (existingIndex >= 0 ? (plan[existingIndex].desiredQty || 0) : 0);
-  const shouldUseMf = useMfPlanning || (existingIndex >= 0 && plan[existingIndex].planningMode === 'mf');
-  const recomputed = getPlannerOption(currentDetailItems, nextQty, { useMf: shouldUseMf });
-  if (!recomputed || !recomputed.option) return;
-
-  const nextItem = {
-    key: identity.key,
-    name: identity.name,
-    barcode: identity.barcode || '',
-    query: identity.query,
-    desiredQty: nextQty,
-    depot: recomputed.option.depot,
-    depotId: recomputed.option.depotId || '',
-    depotUrl: recomputed.option.depotUrl || '',
-    mfStr: recomputed.option.mfStr || '',
-    orderQty: recomputed.option.orderQty,
-    receiveQty: recomputed.option.receiveQty,
-    totalCost: recomputed.option.totalCost,
-    effectiveUnit: recomputed.option.effectiveUnit,
-    planningMode: shouldUseMf ? 'mf' : 'unit',
-    updatedAt: new Date().toISOString(),
-  };
-
-  if (existingIndex >= 0) {
-    plan[existingIndex] = nextItem;
-  } else {
-    plan.unshift(nextItem);
-  }
-
-  saveOrderPlan(plan);
-  renderHomeOrderPlan();
-  showToast(`${identity.name} siparis planina eklendi`);
-}
-
-function removeOrderPlanItem(key, depot) {
-  const next = getOrderPlan().filter(item => !(item.key === key && item.depot === depot));
-  saveOrderPlan(next);
-  renderHomeOrderPlan();
 }
 
 function clearOrderPlan() {
   saveOrderPlan([]);
-  renderHomeOrderPlan();
+  refreshOrderPlanViews();
 }
 
 function addCurrentToRoutineList() {
-  if (!currentDetailItems.length) return;
+  if (!currentDetailItems.length) {
+    showToast('Listeye eklemek icin once bir urun secin');
+    return;
+  }
 
   const identity = getSearchIdentity(currentDetailItems, currentDetailQuery);
   const list = getRoutineList();
@@ -1903,14 +2420,16 @@ function removeRoutineItem(key) {
   const next = getRoutineList().filter(item => item.key !== key);
   saveRoutineList(next);
   renderRoutineList();
+  if (currentPage === 'history') renderHistory();
 }
 
 function openSavedProduct(item) {
-  if (!isBarcodeQuery(item?.barcode || '')) {
-    showToast('Bu plan kaydinda gecerli barkod yok');
+  const query = item?.barcode || item?.query || item?.name || '';
+  if (!query) {
+    showToast('Bu kayit icin arama bilgisi bulunamadi');
     return;
   }
-  openHistorySearch(item.barcode, item.barcode);
+  openHistorySearch(query, query);
 }
 
 function openOrderPlanDetail() {
@@ -1950,28 +2469,31 @@ function renderOrderPlanDetail() {
         </div>
         <div class="plan-detail-stat plan-detail-stat-accent">
           <span>Plan Toplami</span>
-          <strong>₺${totalCost.toFixed(2).replace('.', ',')}</strong>
+          <strong>TL ${totalCost.toFixed(2).replace('.', ',')}</strong>
         </div>
+        <button class="btn btn-outline plan-export-btn" type="button" id="exportPlanCsvBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          CSV İndir
+        </button>
       </div>
       <div class="plan-detail-list">
         ${plan.map(item => `
-          <article class="plan-detail-item">
+          <article class="plan-detail-item plan-detail-card-clickable" tabindex="0" role="button" data-plan-detail-card="${esc(item.key)}" data-plan-detail-card-depot="${esc(item.depot)}">
             <div class="plan-detail-head">
               <div>
                 <h3>${esc(item.name)}</h3>
                 <div class="plan-detail-tags">
                   <span>${esc(item.depot)}</span>
-                  <span>${esc(item.desiredQty)} hedef</span>
-                  <span>${esc(item.receiveQty)} teslim</span>
+                  <span>${esc(item.desiredQty)} adet</span>
                   <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
                 </div>
               </div>
-              <div class="plan-detail-price">₺${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
+              <div class="plan-detail-price">TL ${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
             </div>
             <div class="plan-detail-grid">
               <div class="plan-detail-cell">
                 <span>Birim Maliyet</span>
-                <strong>${item.effectiveUnit > 0 ? '₺' + item.effectiveUnit.toFixed(2).replace('.', ',') : 'Bilinmiyor'}</strong>
+                <strong>${item.effectiveUnit > 0 ? 'TL ' + item.effectiveUnit.toFixed(2).replace('.', ',') : 'Bilinmiyor'}</strong>
               </div>
               <div class="plan-detail-cell">
                 <span>Barkod</span>
@@ -1985,12 +2507,30 @@ function renderOrderPlanDetail() {
             <div class="plan-detail-actions">
               <button class="btn btn-outline" type="button" data-plan-detail-open="${esc(item.key)}" data-plan-detail-depot="${esc(item.depot)}">Urunu Ac</button>
               ${item.depotUrl ? `<button class="btn btn-primary" type="button" data-plan-detail-depot-open="${esc(item.key)}" data-plan-detail-depot-name="${esc(item.depot)}">Depoya Git</button>` : ''}
+              <button class="plan-item-remove" type="button" data-plan-detail-remove="${esc(item.key)}" data-plan-detail-remove-depot="${esc(item.depot)}">Sil</button>
             </div>
           </article>
         `).join('')}
       </div>
     </section>
   `;
+
+  container.querySelectorAll('[data-plan-detail-card]').forEach((card) => {
+    const openItem = () => {
+      const item = plan.find((entry) => entry.key === card.dataset.planDetailCard && entry.depot === card.dataset.planDetailCardDepot);
+      if (item) openSavedProduct(item);
+    };
+    card.addEventListener('click', (event) => {
+      if (event.target.closest('button')) return;
+      openItem();
+    });
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openItem();
+      }
+    });
+  });
 
   container.querySelectorAll('[data-plan-detail-open]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -2005,7 +2545,323 @@ function renderOrderPlanDetail() {
       if (item?.depotUrl) copyAndOpenDepot(item.depotUrl, item.depotId || '');
     });
   });
+
+  container.querySelectorAll('[data-plan-detail-remove]').forEach((btn) => {
+    btn.addEventListener('click', () => removeOrderPlanItem(btn.dataset.planDetailRemove, btn.dataset.planDetailRemoveDepot));
+  });
+
+  document.getElementById('exportPlanCsvBtn')?.addEventListener('click', () => exportOrderPlanCsv(plan));
 }
+
+// ── Bulk Search ──────────────────────────────────────────────────────────────
+
+let _bulkSearchActive = false;
+
+async function searchOneBulkQuery(query) {
+  if (!cachedConfig) await loadDepotStatus();
+  const activeDepots = DEPOT_LIST.filter(d => {
+    const info = cachedConfig?.depots?.[d.id];
+    return info && (info.hasCredentials || info.hasCookies || info.hasToken);
+  });
+
+  const results = await Promise.all(
+    activeDepots.map(depot =>
+      authFetch(`${API_BASE}/api/search-depot?q=${encodeURIComponent(query)}&depotId=${depot.id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.error || !data.results?.length) return [];
+          const depotUrl = data.depotUrl || '';
+          return data.results.map(r => ({ ...r, depotUrl, depotId: depot.id }));
+        })
+        .catch(() => [])
+    )
+  );
+
+  const allItems = results.flat().filter(r => r.fiyatNum > 0);
+  allItems.sort((a, b) => a.fiyatNum - b.fiyatNum);
+  return allItems;
+}
+
+// Returns { card, getResult } so runBulkSearch can read current selection for "add all"
+function renderBulkResultCard(query, items, container) {
+  const card = document.createElement('div');
+  card.className = 'bulk-result-card';
+  card.dataset.bulkQuery = query;
+
+  if (!items.length) {
+    card.classList.add('bulk-result-not-found');
+    card.innerHTML = `
+      <div class="bulk-result-header">
+        <div class="bulk-result-query">"${esc(query)}"</div>
+        <div class="bulk-result-name">Bulunamadı</div>
+      </div>
+    `;
+    container.appendChild(card);
+    return { card, getResult: () => null };
+  }
+
+  const name = items[0].ad || query;
+
+  const state = {
+    options: [],
+    selectedKey: '',
+    qty: 1,
+    quoteVersion: 0,
+    userSelected: false,  // true only after explicit user click on a row
+  };
+
+  function getSelectedOption() {
+    return state.options.find(o => getOfferSelectionKey(o.sourceItem) === state.selectedKey)
+      || state.options[0]
+      || null;
+  }
+
+  function applyOptions(opts, keepUserSelection = false) {
+    state.options = opts;
+    if (keepUserSelection && state.userSelected) {
+      // User explicitly chose a depot — keep it if still in list, else fall back to cheapest
+      const stillValid = opts.some(o => getOfferSelectionKey(o.sourceItem) === state.selectedKey);
+      if (!stillValid) {
+        state.selectedKey = opts[0] ? getOfferSelectionKey(opts[0].sourceItem) : '';
+        state.userSelected = false;
+      }
+    } else {
+      // No user selection yet — always default to cheapest (idx 0 after sort)
+      state.selectedKey = opts[0] ? getOfferSelectionKey(opts[0].sourceItem) : '';
+    }
+  }
+
+  function renderOfferRows(rowsEl) {
+    rowsEl.innerHTML = state.options.map((opt, idx) => {
+      const isBest = idx === 0;
+      const isSelected = getOfferSelectionKey(opt.sourceItem) === state.selectedKey;
+      const unitStr = opt.effectiveUnit.toFixed(2).replace('.', ',');
+      const totalStr = opt.totalCost.toFixed(2).replace('.', ',');
+      const detailText = getBulkOfferDetailText(opt, state.qty);
+      const usesMfPricing = shouldUseMfForQty(state.qty);
+      const primaryLabel = usesMfPricing ? 'Odenecek' : 'Birim';
+      const primaryValue = usesMfPricing ? totalStr : unitStr;
+      const secondaryLabel = usesMfPricing ? 'Efektif birim' : 'Toplam';
+      const secondaryValue = usesMfPricing ? unitStr : totalStr;
+      const liveBadge = opt.pricingMode === 'live'
+        ? '<span class="bulk-offer-badge live">Canlı</span>'
+        : '';
+
+      return `
+        <div class="bulk-offer-row ${isSelected ? 'bulk-offer-selected' : ''}" data-bulk-offer-idx="${idx}" role="button" tabindex="0">
+          <div class="bulk-offer-depot">
+            <span class="bulk-offer-depot-name">${esc(opt.depot)}</span>
+            ${isBest ? '<span class="bulk-offer-badge best">En Ucuz</span>' : ''}
+            ${isSelected ? '<span class="bulk-offer-badge selected">Secili</span>' : ''}
+            ${liveBadge}
+          </div>
+          <div class="bulk-offer-detail">
+            <span class="bulk-offer-mf">${esc(detailText)}</span>
+          </div>
+          <div class="bulk-offer-price">
+            <span class="bulk-offer-unit">${primaryLabel}: TL ${primaryValue}</span>
+            <span class="bulk-offer-total">${secondaryLabel}: TL ${secondaryValue}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    rowsEl.querySelectorAll('[data-bulk-offer-idx]').forEach(row => {
+      const select = () => {
+        const opt = state.options[parseInt(row.dataset.bulkOfferIdx, 10)];
+        if (opt) {
+          state.selectedKey = getOfferSelectionKey(opt.sourceItem);
+          state.userSelected = true;
+        }
+        renderOfferRows(rowsEl);
+        syncFooter();
+      };
+      row.addEventListener('click', select);
+      row.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); }
+      });
+    });
+  }
+
+  function syncFooter() {
+    const opt = getSelectedOption();
+    const footerPrice = card.querySelector('.bulk-footer-price');
+    if (footerPrice && opt) {
+      const footerLabel = shouldUseMfForQty(state.qty) ? 'Odenecek: ' : '';
+      footerPrice.textContent = `${footerLabel}TL ${opt.totalCost.toFixed(2).replace('.', ',')}`;
+    }
+  }
+
+  async function refreshQuotes(rowsEl) {
+    const version = ++state.quoteVersion;
+    const fallback = getFallbackPlannerOptions(items, state.qty);
+    applyOptions(fallback);
+    renderOfferRows(rowsEl);
+    syncFooter();
+
+    resolvePlannerOptions(items, state.qty).then(quoted => {
+      if (version !== state.quoteVersion || !quoted.length) return;
+      const changed = quoted.some((q, i) => {
+        const f = fallback[i];
+        return !f
+          || Math.abs((q.effectiveUnit || 0) - (f.effectiveUnit || 0)) > 0.005
+          || Math.abs((q.totalCost || 0) - (f.totalCost || 0)) > 0.005
+          || (q.pricingMode || '') !== (f.pricingMode || '');
+      });
+      if (changed) {
+        applyOptions(quoted, true); // keep explicit user selections
+        renderOfferRows(rowsEl);
+        syncFooter();
+      }
+    }).catch(() => {});
+  }
+
+  card.innerHTML = `
+    <div class="bulk-result-header">
+      <div class="bulk-result-query">"${esc(query)}"</div>
+      <div class="bulk-result-name">${esc(name)}</div>
+    </div>
+    <div class="bulk-offer-rows"></div>
+    <div class="bulk-result-footer">
+      <div class="bulk-footer-qty">
+        <button class="action-qty-step" data-bulk-minus type="button">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <input type="number" class="action-qty-input bulk-qty-input" min="1" value="1" inputmode="numeric" />
+        <button class="action-qty-step" data-bulk-plus type="button">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <span class="bulk-footer-price"></span>
+      </div>
+      <button class="btn btn-primary bulk-add-btn" type="button">Plana Ekle</button>
+    </div>
+  `;
+
+  const rowsEl = card.querySelector('.bulk-offer-rows');
+  refreshQuotes(rowsEl);
+
+  // Qty controls
+  const qtyInput = card.querySelector('.bulk-qty-input');
+  const applyQty = (val) => {
+    state.qty = Math.max(parseInt(val, 10) || 1, 1);
+    qtyInput.value = state.qty;
+    refreshQuotes(rowsEl);
+  };
+  card.querySelector('[data-bulk-minus]').addEventListener('click', () => applyQty(state.qty - 1));
+  card.querySelector('[data-bulk-plus]').addEventListener('click', () => applyQty(state.qty + 1));
+  qtyInput.addEventListener('change', () => applyQty(qtyInput.value));
+  qtyInput.addEventListener('input', () => applyQty(qtyInput.value));
+
+  // Add to plan
+  const addBtn = card.querySelector('.bulk-add-btn');
+  addBtn.addEventListener('click', () => {
+    const opt = getSelectedOption();
+    if (!opt) return;
+    addPlannerOptionToOrderPlan(opt, state.qty, { toastLabel: `${name} siparis planina eklendi` });
+    card.classList.add('bulk-result-added');
+    addBtn.textContent = 'Eklendi ✓';
+    addBtn.disabled = true;
+  });
+
+  container.appendChild(card);
+
+  // Expose current selection so runBulkSearch can use it for "add all"
+  return {
+    card,
+    getResult: () => {
+      const opt = getSelectedOption();
+      return opt ? { opt, qty: state.qty, name } : null;
+    },
+  };
+}
+
+async function runBulkSearch() {
+  if (_bulkSearchActive) return;
+
+  const textarea = document.getElementById('bulkSearchInput');
+  const status = document.getElementById('bulkSearchStatus');
+  const resultsEl = document.getElementById('bulkSearchResults');
+  const addAllBtn = document.getElementById('bulkSearchAddAllBtn');
+  const runBtn = document.getElementById('bulkSearchRunBtn');
+
+  const rawQueries = (textarea.value || '')
+    .split('\n')
+    .map(q => q.trim())
+    .filter(Boolean);
+
+  if (!rawQueries.length) {
+    showToast('En az bir ürün girin');
+    return;
+  }
+
+  _scQuoteCache.clear();
+
+  // Deduplicate: barkodlar için normalize edilmiş değer, diğerleri için lowercase
+  const seenKeys = new Set();
+  const queries = [];
+  let dupCount = 0;
+  rawQueries.forEach(q => {
+    const key = isBarcodeQuery(q) ? q.trim() : q.toLowerCase();
+    if (seenKeys.has(key)) {
+      dupCount++;
+    } else {
+      seenKeys.add(key);
+      queries.push(q);
+    }
+  });
+
+  if (dupCount > 0) {
+    showToast(`${dupCount} tekrarlayan sorgu çıkarıldı`);
+  }
+
+  _bulkSearchActive = true;
+  runBtn.disabled = true;
+  addAllBtn.style.display = 'none';
+  resultsEl.innerHTML = '';
+
+  const cardRefs = [];
+
+  for (let i = 0; i < queries.length; i++) {
+    const q = queries[i];
+    status.textContent = `Aranıyor ${i + 1}/${queries.length}: ${q}`;
+    const items = await searchOneBulkQuery(q);
+    const ref = renderBulkResultCard(q, items, resultsEl);
+    if (ref) cardRefs.push(ref);
+  }
+
+  status.textContent = `${queries.length} sorgu tamamlandı${dupCount > 0 ? ` (${dupCount} tekrar atlandı)` : ''}.`;
+  _bulkSearchActive = false;
+  runBtn.disabled = false;
+
+  const hasAny = cardRefs.some(r => r.getResult() !== null);
+  if (hasAny) {
+    addAllBtn.style.display = 'inline-flex';
+    addAllBtn.onclick = () => {
+      // Use each card's current live-quoted, user-selected option and qty
+      cardRefs.forEach(ref => {
+        const result = ref.getResult();
+        if (!result) return;
+        addPlannerOptionToOrderPlan(result.opt, result.qty, { toastLabel: `${result.name} eklendi` });
+      });
+      showToast('Bulunan tüm ürünler plana eklendi');
+      addAllBtn.style.display = 'none';
+    };
+  }
+}
+
+(function initBulkSearch() {
+  const runBtn = document.getElementById('bulkSearchRunBtn');
+  const textarea = document.getElementById('bulkSearchInput');
+  if (!runBtn || !textarea) return;
+
+  runBtn.addEventListener('click', runBulkSearch);
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      runBulkSearch();
+    }
+  });
+})();
 
 function renderHomeOrderPlan() {
   const container = document.getElementById('orderPlanContainer');
@@ -2037,7 +2893,7 @@ function renderHomeOrderPlan() {
       </div>
       <div class="plan-summary-stat">
         <span>Plan Toplami</span>
-        <strong>₺${totalCost.toFixed(2).replace('.', ',')}</strong>
+        <strong>TL ${totalCost.toFixed(2).replace('.', ',')}</strong>
       </div>
     </div>
     <div class="plan-list">
@@ -2046,11 +2902,11 @@ function renderHomeOrderPlan() {
           <button class="plan-item-main" data-plan-open="${esc(item.key)}" data-plan-depot="${esc(item.depot)}">
             <div class="plan-item-top">
               <div class="plan-item-name">${esc(item.name)}</div>
-              <div class="plan-item-price">₺${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
+              <div class="plan-item-price">TL ${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
             </div>
             <div class="plan-item-meta">
               <span>${esc(item.depot)}</span>
-              <span>${esc(item.desiredQty)} hedef / ${esc(item.receiveQty)} teslim</span>
+              <span>${esc(item.desiredQty)} adet</span>
               <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
             </div>
           </button>
@@ -2231,13 +3087,13 @@ function renderHomeDashboard() {
   openPlanBtn?.addEventListener('click', openOrderPlanDetail);
 })();
 
-// ── History ──
+// Ã¢â€â‚¬Ã¢â€â‚¬ History Ã¢â€â‚¬Ã¢â€â‚¬
 function saveHistory(items, query) {
   if (!items || items.length === 0) return;
   const normalizedItems = dedupeSearchItems(items, query);
   const identity = getSearchIdentity(normalizedItems, query);
   const bestItem = normalizedItems.find(i => i.fiyatNum > 0) || normalizedItems[0];
-  fetch(API_BASE + '/api/history', {
+  authFetch(API_BASE + '/api/history', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -2260,7 +3116,7 @@ function saveHistory(items, query) {
 }
 
 async function fetchHistory(limit = 100) {
-  const res = await fetch(API_BASE + '/api/history?limit=' + limit);
+  const res = await authFetch(API_BASE + '/api/history?limit=' + limit);
   return res.json();
 }
 
@@ -2282,7 +3138,7 @@ function openHistorySearch(query, barcode) {
   const selectedDrug = document.getElementById('selectedDrug');
   if (barcode) {
     selectedBarcode = barcode;
-    document.getElementById('selectedDrugName').textContent = query || 'Geçmiş Araması';
+    document.getElementById('selectedDrugName').textContent = query || 'GeÃƒÂ§miÃ…Å¸ AramasÃ„Â±';
     document.getElementById('selectedDrugCode').textContent = 'Barkod: ' + barcode;
     selectedDrug.style.display = 'flex';
   } else {
@@ -2323,7 +3179,7 @@ async function renderHomeHistory() {
       const { dateStr, timeStr } = formatHistoryDateParts(entry.tarih);
       const offerCount = entry.sonuclar ? entry.sonuclar.length + ' depo' : 'Teklif yok';
       const bestDepot = entry.enUcuz ? entry.enUcuz.depot : 'Teklif yok';
-      const bestPrice = entry.enUcuz ? '₺' + entry.enUcuz.fiyat : '-';
+      const bestPrice = entry.enUcuz ? 'TL ' + entry.enUcuz.fiyat : '-';
 
       return `
         <button class="home-history-item" data-history-query="${esc(entry.ilac)}" data-history-barcode="${esc(entry.barkod || '')}">
@@ -2367,11 +3223,11 @@ async function renderHistory() {
         <table class="others-table">
           <thead>
             <tr>
-              <th>TARİH</th>
-              <th>İLAÇ</th>
+              <th>TARIH</th>
+              <th>ILAC</th>
               <th>EN UCUZ DEPO</th>
-              <th style="text-align:right">FİYAT</th>
-              <th>TEKLİF</th>
+              <th style="text-align:right">FIYAT</th>
+              <th>TEKLIF</th>
               <th></th>
             </tr>
           </thead>
@@ -2392,7 +3248,7 @@ async function renderHistory() {
             ${entry.barkod ? '<br><span style="font-size:11px;color:var(--text-3);font-family:JetBrains Mono,monospace">' + esc(entry.barkod) + '</span>' : ''}
           </td>
           <td>${entry.enUcuz ? esc(entry.enUcuz.depot) : '-'}</td>
-          <td class="price-cell">${entry.enUcuz ? '₺' + esc(entry.enUcuz.fiyat) : '-'}</td>
+          <td class="price-cell">${entry.enUcuz ? 'TL ' + esc(entry.enUcuz.fiyat) : '-'}</td>
           <td><span style="font-size:12px;color:var(--text-2)">${entry.sonuclar ? entry.sonuclar.length + ' depo' : '-'}</span></td>
           <td>
             <button class="btn-depot-link" data-history-id="${entry.id}" title="Sil">
@@ -2417,7 +3273,7 @@ async function renderHistory() {
 }
 
 async function deleteHistory(id) {
-  await fetch(API_BASE + '/api/history/' + id, { method: 'DELETE' });
+  await authFetch(API_BASE + '/api/history/' + id, { method: 'DELETE' });
   renderHomeDashboard();
   renderHistory();
 }
@@ -2428,6 +3284,7 @@ function applyHumanUiCopy() {
   const textMap = [
     ['.profile-menu-item:nth-of-type(1)', 'Arama Geçmişi'],
     ['.profile-menu-item:nth-of-type(2)', 'Depo Ayarları'],
+    ['.profile-menu-item.logout-item', 'Çıkış Yap'],
     ['.hero-pill', 'Hızlı, net, güvenilir'],
     ['.hero h1', 'En uygun ilacı\nhızla bulun'],
     ['.hero p', 'Depo fiyatlarını tek ekranda karşılaştırın, doğru teklife daha kısa sürede ulaşın.'],
@@ -2441,7 +3298,7 @@ function applyHumanUiCopy() {
     ['.home-history-header h3', 'Arama Geçmişi'],
     ['.home-history-header p', 'Son sorgularınıza tek tıkla geri dönün.'],
     ['#loading div:last-child', 'Depolardan fiyat bilgileri alınıyor...'],
-    ['#searchActionProduct', 'Seçili ürün'],
+    ['#searchActionProduct', 'Seçili Ürün'],
     ['#page-settings .settings-header h2', 'Depo Ayarları'],
     ['#page-settings .settings-header p', 'Depo bağlantılarınızı buradan yönetin.'],
     ['#page-history .settings-header h2', 'Arama Geçmişi'],
@@ -2499,13 +3356,13 @@ function applyHumanUiCopy() {
   if (actionEyebrow) actionEyebrow.textContent = 'Hızlı İşlem';
 
   const actionTitle = document.querySelector('.action-panel-title');
-  if (actionTitle) actionTitle.textContent = 'Ürün işlemleri';
+  if (actionTitle) actionTitle.textContent = 'Ürün İşlemleri';
 
   const actionSubtitle = document.querySelector('.action-panel-subtitle');
   if (actionSubtitle) actionSubtitle.textContent = 'Ürünü plana ekleyin veya sabit listenize kaydedin.';
 
   const actionLabel = document.querySelector('.action-summary-label');
-  if (actionLabel) actionLabel.textContent = 'Seçili ürün';
+  if (actionLabel) actionLabel.textContent = 'Seçili Ürün';
 
   const actionTitlePrimary = document.querySelector('#addToPlanBtn .action-btn-title');
   if (actionTitlePrimary) actionTitlePrimary.textContent = 'Sipariş Planına Ekle';
@@ -2528,5 +3385,4 @@ function applyHumanUiCopy() {
   }
 }
 
-applyHumanUiCopy();
-renderHomeDashboard();
+// Not: applyHumanUiCopy() ve renderHomeDashboard() artÃ„Â±k initApp() iÃƒÂ§inde ÃƒÂ§aÃ„Å¸rÃ„Â±lÃ„Â±yor.

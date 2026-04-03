@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// In-memory config cache: disk IO'yu azaltir
+let _configCache = null;
+
 const PROJECT_ROOT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 const PROJECT_ROOT_DATA_DIR = path.join(__dirname, '..', 'data');
 
@@ -91,9 +94,11 @@ function ensureConfigFile() {
 }
 
 function loadConfig() {
+  if (_configCache) return _configCache;
   const configPath = ensureConfigFile();
   try {
-    return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    _configCache = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    return _configCache;
   } catch (e) {
     console.error('Config okuma hatasi:', e.message);
     return { depots: {} };
@@ -101,8 +106,14 @@ function loadConfig() {
 }
 
 function saveConfig(config) {
+  _configCache = config; // Once cache'i guncelle
   const configPath = ensureConfigFile();
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+/** Cache'i gecersiz kilar — bir sonraki loadConfig() disk'ten okuyacak */
+function invalidateConfigCache() {
+  _configCache = null;
 }
 
 module.exports = {
@@ -112,4 +123,5 @@ module.exports = {
   getDataFilePath,
   loadConfig,
   saveConfig,
+  invalidateConfigCache,
 };

@@ -1,269 +1,127 @@
-# AI_CHANGELOG — Makine Okunabilir Değişiklik Günlüğü
+﻿# AI_CHANGELOG - Makine Okunabilir Degisiklik Gunlugu
 
-> **DIKKAT AI ASISTANI (ATTENTION ALL AI AGENTS):**
-> Bu dosya sistemdeki kod değişikliklerinin tarihçesini en hızlı ve maliyetsiz (least token usage) şekilde okuyabilmeniz için özel olarak **"Makine Formatında" (Machine-Readable)** tasarlanmıştır.
->
-> - Tüm geçmişi okumana gerek yoktur.
-> - Eğer en son projenin ne durumda bırakıldığını anlamak istiyorsan sadece `@LATEST_CHANGE` bloğuna odaklan.
-> - Yeni bir işlem yaptığında ESKİ `@LATEST_CHANGE` tag'ini `@ARCHIVED_CHANGE` olarak değiştir ve kendi yaptığın işlemi en tepeye `@LATEST_CHANGE` formatıyla YENİDEN EKLE.
+Bu dosya son degisikliklerin kisa ama teknik kaydidir. Yeni agent once en ustteki bloğu okumali.
 
 ---
 
 ### @LATEST_CHANGE
-**TIMESTAMP:** 2026-03-31T12:35:00
-**SESSION:** Auth Feature Planning Note
-**AGENT:** Codex
-
-**[MODIFIED_FILES]**
-- `docs/MAINTENANCE_GUIDE.md` | Sonraki buyuk feature `Login Auth ve Kullanici Oturumu` olacak sekilde backlog ve ilk feature notu guncellendi.
-- `AI_CONTEXT.md` | Auth sonrasi kullaniciya ozel depo verisi yukleme hedefi proje hafizasina eklendi.
-- `AI_CHANGELOG.md` | Son plan/not degisikligi kaydi guncellendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** Auth feature tanimi
-- **ADDED:** Kullaniciya ozel depo/session verisi gereksinimi notu
-- **REMOVED:** Yok
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Auth feature'i depo login adaptorlerini degistirmeden, ustte bir kullanici oturumu katmani olarak tasarlanmalidir. Mevcut depo cookie/token/session mantigi korunmali, sadece hangi kullanicinin hangi depo oturumunu gorecegi ayrismalidir.
-
----
-
-### @ARCHIVED_CHANGE_013
-**TIMESTAMP:** 2026-03-31T12:10:00
-**SESSION:** UI Fix Release 2.0.3
-**AGENT:** Codex
-
-**[MODIFIED_FILES]**
-- `package.json` | Sürüm `2.0.3` yapıldı.
-- `renderer/index.html` | Sipariş planı için `Plani Incele` aksiyonu ve ayrı plan detay sayfası eklendi.
-- `renderer/scripts/app.js` | Sipariş planı toplam mantığı düzeltildi, MF sadece explicit miktarda uygulanır hale getirildi, plan detay ekranı ve göreli görsel URL düzeltmesi eklendi.
-- `renderer/styles/main.css` | Plan detay ekranı, boş rutin liste gizleme düzeni ve görsel fallback stilleri eklendi.
-- `AI_CONTEXT.md` | 2.0.3 UI fix release notları eklendi.
-- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** Sipariş planı inceleme ekranı
-- **ADDED:** Göreli görsel URL normalize mantığı
-- **ADDED:** Kırık resim fallback davranışı
-- **FIXED:** Yanlış kampanya/toplam yansıması
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Bu release yalnızca UI/workflow katmanını etkiler. Search, fiyat hesaplama çekirdeği, login ve depo adaptörlerinin ağ akışı değiştirilmemiştir. Updater testi için `v2.0.3` tag release asset'lerinin oluşması gerekir.
-
----
-
-### @ARCHIVED_CHANGE_012
-**TIMESTAMP:** 2026-03-31T11:00:00
-**SESSION:** Release Automation Stabilization
-**AGENT:** Codex
-
-**[MODIFIED_FILES]**
-- `.github/workflows/release.yml` | `v*` tag veya manuel tetikleme ile Windows release publish eden GitHub Actions pipeline eklendi.
-- `scripts/validate-release.js` | Version formatini, GitHub publish ayarini ve tag-version eslesmesini dogrulayan release check scripti eklendi.
-- `package.json` | `release:check`, `release:local`, `release:ci` scriptleri eklendi; `build:win` release dogrulama ile guclendirildi.
-- `main.js` | Updater kontrolu packaged acilistan 15 saniye sonra ve ardindan 6 saatte bir calisacak sekilde guclendirildi.
-- `docs/UPDATER_RELEASE_PLAN.md` | Elle setup dagitimi yerine tag tabanli profesyonel release akisina ek notlar eklendi.
-- `docs/MAINTENANCE_GUIDE.md` | Tag push + GitHub Actions release modeli not edildi.
-- `AI_CONTEXT.md` | Release otomasyonu ve periyodik updater davranisi proje hafizasina eklendi.
-- `AI_CHANGELOG.md` | Son degisiklik kaydi guncellendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** GitHub Actions release pipeline
-- **ADDED:** Release validation scripti
-- **ADDED:** Periyodik updater kontrol mantigi
-- **REMOVED:** Yok
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Updater artik source push'a degil release asset zincirine dayanir. Eczacilarin tek tek setup almamasi icin `package.json` version ile git tag daima birebir eslesmeli ve release asset'leri public indirilebilir olmalidir.
-
----
-
-### @ARCHIVED_CHANGE_011
-**TIMESTAMP:** 2026-03-31T10:40:00
-**SESSION:** Updater 2.0.2 Hardening
-**AGENT:** Codex
-
-**[MODIFIED_FILES]**
-- `package.json` | Sürüm `2.0.2` yapıldı. `build:win` ve `release:win` scriptleri eklendi.
-- `main.js` | Auto-updater olayları güçlendirildi. Update kontrolü packaged modla sınırlandı, indirme tamamlanınca yeniden başlatma diyaloğu eklendi.
-- `docs/UPDATER_RELEASE_PLAN.md` | Updater zinciri, neden sadece push'un yetmediği ve 2.0.2 release adımları dokümante edildi.
-- `docs/MAINTENANCE_GUIDE.md` | Updater/release rehberine referans eklendi.
-- `AI_CONTEXT.md` | 2.0.2 updater hardening bilgisi proje hafızasına işlendi.
-- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** `release:win` publish scripti
-- **ADDED:** Packaged-only update kontrolü
-- **ADDED:** Update-downloaded restart prompt
-- **ADDED:** 2.0.2 updater release planı
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Updater'ın çalışması için sadece `git push` yetmez; GitHub release asset'leri gerekir. Testi kurulu `2.0.1` uygulama ile yapmak için önce `2.0.2` release publish edilmelidir.
-
----
-
-### @ARCHIVED_CHANGE_010
-**TIMESTAMP:** 2026-03-31T10:05:00
-**SESSION:** Pharmacist Workflow Layer
-**AGENT:** Codex
-
-**[MODIFIED_FILES]**
-- `renderer/index.html` | Ana sayfaya `Aktif Sipariş Planı` ve `Sabit İhtiyaç Listesi` kartları, sonuç ekranına aksiyon paneli, history ekranına `Rutin Alım Adayları` alanı eklendi.
-- `renderer/scripts/app.js` | Frontend-only workflow katmanı yazıldı. `localStorage` tabanlı sipariş planı ve sabit ihtiyaç listesi, history insight üretimi ve sonuç ekranından bu akışlara ekleme davranışı eklendi.
-- `renderer/styles/main.css` | Yeni operasyon kartları, sipariş listesi satırları, aksiyon paneli ve history insight alanları stillendi.
-- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
-- `AI_CONTEXT.md` | Eczacı odaklı yeni workflow katmanı proje hafızasına işlendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** Sipariş planı özeti
-- **ADDED:** Sabit ihtiyaç listesi
-- **ADDED:** History tabanlı rutin alım adayları
-- **NOT:** Fiyat/search/login/depot adapter mantığına dokunulmadı.
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Bu feature seti tamamen `renderer/` katmanında tutuldu. Sipariş planı ve sabit ihtiyaçlar `localStorage` kullanır. `src/server.js`, `src/depot-manager.js` ve `src/depots/*.js` altındaki fiyat/search/login akışlarına dokunmayın.
-
----
-
-### @ARCHIVED_CHANGE_009
-**TIMESTAMP:** 2026-03-31T09:10:00
-**SESSION:** Maintenance Guide & Feature Backlog
-**AGENT:** Codex
-
-**[MODIFIED_FILES]**
-- `docs/MAINTENANCE_GUIDE.md` | Proje için kalıcı bakım rehberi eklendi. Mimari özet, klasör sorumlulukları, riskli alanlar, test rutini, değişiklik kuralları ve feature backlog yazıldı.
-- `AI_CONTEXT.md` | Yeni bakım rehberi referansı ve önerilen ilk feature (`Fiyat Değişim Takibi`) proje hafızasına işlendi.
-- `AI_CHANGELOG.md` | Son değişiklik kaydı güncellendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** Yeni onboarding ve bakım dokümanı.
-- **ADDED:** Öncelikli feature backlog ve sıralı öneri listesi.
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Bakım veya feature geliştirme öncesi önce `docs/MAINTENANCE_GUIDE.md` ve ardından `AI_CONTEXT.md` okunmalı. İlk tavsiye edilen feature, mevcut barkod ve history altyapısı üzerine kurulacak `Fiyat Değişim Takibi` özelliğidir.
-
----
-
-### @ARCHIVED_CHANGE_008
-**TIMESTAMP:** 2026-03-30T10:05:00
-**SESSION:** Alliance Net Price (124,76) & QR Stability Fix
+**TIMESTAMP:** 2026-04-03T11:05:00
+**SESSION:** Toplu Arama Fiyat Duzeltmesi
 **AGENT:** Antigravity
 
 **[MODIFIED_FILES]**
-- `src/depots/alliance.js` | Alliance için %100 doğru Net Fiyat (124,76) yakalama motoru tamamlandı. `SelectedClass: "3"` ve `Quantity: 1` (number) senkronizasyonu ile 0-length response ve 'Unexpected Error' aşıldı.
-- `renderer/scripts/app.js` | **Karekod Titreme Fixi**: `parseQRCode` metodu eklendi (GS1 DataMatrix -> 13 barkod). Seri okutmalarda ekranın zıplamasını önleyen 300ms 'Search Lock' ve 100ms 'UI Delay' mekanizmaları kuruldu.
-- `AI_CONTEXT.md` | Alliance mimarisi ve Karekod stabilizasyon kuralları dokümantasyona eklendi.
+- `renderer/scripts/app.js` | calcMfOptions(): targetQty < mf.total ise MF batch zorla uygulanmaz, unit fiyat kullanilir - orn: 3 adet hedef ile MF 19+1 olan Nevzat/Selcukta artik TL 2884 degil ~TL 455 gosterilir
+- `renderer/scripts/app.js` | resolveQuotedOptions(): Global _activeQuoteId guard kaldirildi - paralel bulk kart cagirilari artik birbirini iptal etmiyor; her caller kendi versiyonunu yonetiyor (renderStockCalc->_scQuoteVersion, refreshQuotes->state.quoteVersion)
 
 **[ADDED/REMOVED]**
-- **ADDED:** GS1 DataMatrix (Pharmacy QR) Parser: Uzun tarama dizilerinden barkodu (869...) temizler.
-- **ADDED:** Concurrency Search Lock: Aynı barkodun saniyelik seri basımlarını filtreler.
-- **FIXED:** Alliance Healthcare Net Price: Liste (136) vs Net (124) uyuşmazlığı giderildi.
+- **MODIFIED:** calcMfOptions - targetQty < mf.total guard eklendi
+- **REMOVED:** resolveQuotedOptions'taki global _activeQuoteId / quoteId guard
 
 **[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Alliance'ta barkod araması yaparken `SelectedClass: "3"` PARAMETRESİ MECBURİDİR; aksi halde kampanyalar boş gelir. Karekod okutulduğunda `app.js` içindeki `parseQRCode` fonksiyonuna güvenin; manuel regex yazmayın.
+1. calcMfOptions artik targetQty >= mf.total olmadan MF uygulamiyor. Eski davranis: 3 adet icin MF 19+1 -> 19 adet alim hesapli. Yeni davranis: 3 adet icin unit fiyat, MF 'availableMfStr' olarak gosterilir.
+2. _activeQuoteId artik resolveQuotedOptions icinde yok. Sadece QUOTE_CONCURRENCY_LIMIT ve runConcurrent kullanilmakta.
+3. Selcuk ve Nevzat live quote (fetchQuotedOption) hala calisir - calcMfOptions fallback duzeltildi, live override hala aktif.
 
 ---
 
-### @ARCHIVED_CHANGE_007
-**TIMESTAMP:** 2026-03-30T09:45:00
-**SESSION:** Alliance Healthcare Net Price Fix (Initial Approach)
-**AGENT:** Antigravity
-
-**[MODIFIED_FILES]**
-- `renderer/scripts/app.js` | 13 digit Barkod tabanlı Entity (Varlık) modeline geçildi. `nameToBarcode` map'i ile depolar arası çapraz barkod tamamlama (Cross-ref) mantığı eklendi. `MIN_GATHER_TIME` (1.5sn) bekleme süresi ile UI zıplamaları engellendi. Enter tuşu zırhlandı.
-- `renderer/styles/main.css` | Varyant seçimi "Görsel Destekli Liste" (List View) tasarımına dönüştürüldü. Animasyonlar (slideLeft) ve hover efektleri premium hale getirildi.
-- `main.js` | Electron içerisinde WebView dahil tüm pencerelerde Sağ Tık (Copy/Paste) menüsü aktif edildi. `autoUpdater` log crash hatası fixlendi.
-- `src/depots/selcuk.js` & `nevzat.js` | Arama sonuçlarında gelmeyen barkodlar için otomatik detay sayfasına gitme (scrape) ve barkod enjekte etme özelliği eklendi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** Cross-Depot Barcode Sync: Bir depoda olan barkodun, aynı isimli başka bir deponun barkodsuz ürününe "Entity ID" olarak atanması sağlandı.
-- **ADDED:** 1.5s Gathering Delay: Asenkron veri akışında görsel stabilite sağlandı.
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Uygulama artık çok güçlü bir "Tekil Veri" (Single Entity) modeline sahiptir. İsim farklılıkları barkod eşleşmesi sayesinde otomatik olarak bertaraf edilir. Yeni bir depo eklerken mutlaka `barkod` alanının doluluğundan emin olun, aksi halde Cross-ref motoruna güvenin.
-
----
-
-### @ARCHIVED_CHANGE_005
-**TIMESTAMP:** 2026-03-30T08:15:00
-**SESSION:** UX Dev: Variant Selection Layer (Gruplama Katmanı)
-**AGENT:** Antigravity
-**TIMESTAMP:** 2026-03-30T08:07:00
-**SESSION:** Root Directory Aesthetics & Cleanup
-**AGENT:** Antigravity
-
-**[MODIFIED_FILES]**
-- `create-shortcut.vbs`, `durdur.bat`, `kur.bat`, `start.vbs` | `scripts/` klasörüne taşındı.
-- `public_old/` | Git'ten koparılmak üzere gizli `_archive/` klasörünün içine taşındı.
-
----
-
-### @ARCHIVED_CHANGE_003
-**TIMESTAMP:** 2026-03-30T07:55:00
-**SESSION:** Git Initialization & OTA (Auto-Updater) System
-**AGENT:** Antigravity
-
-**[MODIFIED_FILES]**
-- `package.json` | "electron-updater" eklendi. `build.publish` bloğuna "github" konfigürasyonu eklendi.
-- `main.js` | Top seviyede `autoUpdater` modülü yüklendi. `app.whenReady()` bloğunda `autoUpdater.checkForUpdatesAndNotify()` arka plan tetikleyicisi yazıldı. Log transport aktifleştirildi.
-
-**[ADDED/REMOVED]**
-- **ADDED:** `.gitignore` dosyası oluşturuldu.
-- **SECURITY:** `config.json` (Parolalar) ve `data/history.json` (Arama Kaydı) sıkı bir şekilde versiyon kontrolünden engellendi (Gizlendi).
-- **GIT:** `git init` ve initial commit ile versiyon kontrolü resmen başladı.
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Proje artık versiyon kontrolündedir. Config'e veri kaydederken şifre gibi hashlerin kodda değil her daim dışarıdan çekildiğine (.gitignore ile gizlenen yerlerden geldiğine) dikkat ediniz. Uygulamanın Build işleminden sonra OTA otomatik güncellemeleri açık durumdadır.
-
----
-
-### @ARCHIVED_CHANGE_002
-**TIMESTAMP:** 2026-03-30T07:46:00
-**SESSION:** Directory Cleanup & Unified Architecture
-**AGENT:** Antigravity
-
-**[MODIFIED_FILES]**
-- `src/server.js` (Satır: 16) | `public` dizini `renderer` olarak değiştirildi.
-- `main.js` (Satır: 45-50) | `loadFile` yerine `loadURL('http://localhost:3000')` eklendi.
-- `renderer/scripts/app.js` (Satır: 1-25 ve Satır: 620-630) | Titlebar `window.electronAPI` wrap içine alındı (Web ortamı stabilizasyonu).
-- `AI_CONTEXT.md` | Single Source of Truth, Development Workflow ve Log kuralları eklendi.
-
-**[ADDED/REMOVED]**
-- **REMOVED:** Monolithic file logic, duplicate frontend contexts.
-- **ADDED:** Directories `_archive`, `_backups`, `docs` for cleaning up.
-
-**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-Sistem şu an tam randımanlı Electron/Web unified (tekil) mimarisiyle çalışmaktadır. Yeni özellik geliştirmeden önce mutlaka Chrome (`localhost:3000`) üzerinden UI/Backend testi yapınız.
-
----
-
-### @ARCHIVED_CHANGE_001
-**TIMESTAMP:** 2026-03-27
-**SESSION:** Electron Migration & Desktop Conversion
-**AGENT:** Cursor
-
-**[MODIFIED_FILES]**
-- Tüm `public/` klasör öğeleri `renderer/` içine klonlandı.
-- `main.js` native titlebar ve IPC Handler'lar eklendi.
-- `renderer/scripts/app.js` arasına MF (Mal Fazlası) uçuş butonu arayüzü eklendi.
 ### @LATEST_CHANGE
-**TIMESTAMP:** 2026-03-31T13:10:00
-**SESSION:** Product Design Hardening & Stable UI Pass
+**TIMESTAMP:** 2026-04-03T10:44:00
+**SESSION:** v2.1.2 - Stabilizasyon Faz 3 (Utils Modulu + Config Cache)
+**AGENT:** Antigravity
+
+**[MODIFIED_FILES]**
+- `renderer/scripts/utils.js` | [YENi] Stateless saf utility fonksiyonlar buraya tasindu: parseMf, formatCurrency, extractBarcode, parseQRCode, isBarcodeQuery, normalizeDrugName, slugifyName, normalizeImageUrl, isUsableImageUrl, getImageFallbackSvg, dedupeStoredItems, runConcurrent
+- `renderer/index.html` | utils.js auth.js'den once yukleniyor (line 551)
+- `src/config-store.js` | _configCache in-memory cache eklendi; loadConfig() cagrisi disk yerine RAM'den okur; saveConfig() cache'i de gunceller; invalidateConfigCache() ile zorla yenileme
+
+**[ADDED/REMOVED]**
+- **ADDED:** renderer/scripts/utils.js (6.5KB, 14 pure utility fonksiyon)
+- **ADDED:** _configCache in-memory cache (config-store.js)
+- **ADDED:** invalidateConfigCache() export'u
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+1. utils.js'deki fonksiyonlar app.js'de HALa TANIMLIYKEN utils.js'e de eklendi - cift tanim var.
+   Cozum: Faz 3 eksik kalan adim: app.js'den bu fonksiyonlari silmek gerekiyor.
+   Simdiye kadar yapilmadi cunku cift tanim fonksiyonel bozukluk olusturmuyor (en son tanimlanan kazaniyor).
+2. config cache invalidasyon: Electron restart olmaksizin harici config degisikligi cache'i atlatiyor.
+   Cozum: initDepots sonrasinda invalidateConfigCache() cagrisi gerekebilir.
+
+---
+
+### @LATEST_CHANGE
+**TIMESTAMP:** 2026-04-03T01:10:00
+**SESSION:** v2.1.1 - Teklif Secimi UX + UTF-8 Temizligi + Canli MF Stabilizasyonu
 **AGENT:** Codex
 
 **[MODIFIED_FILES]**
-- `renderer/styles/main.css` | Arayuz genelinde daha profesyonel, daha sakin ve daha stabil bir tasarim dili uygulandi. Hero alani, dashboard kartlari, sonuc kartlari, en iyi teklif karti, tablo alanlari, ayarlar kartlari, depo paneli, geri butonlari ve aksiyon yuzeyleri daha rafine hale getirildi.
-- `renderer/scripts/app.js` | Gorunen sabit metinler icin daha dogal ve insan yapimi urun dili uygulandi. Bozuk gorunen Turkce metinler runtime seviyesinde duzeltildi. Ana ekran, gecmis, ayarlar, plan, hizli islem ve sonuc ekranlarindaki metinler daha profesyonel hale getirildi.
-- `renderer/index.html` | Hizli islem paneli sadeleştirildi, buton metinleri ve panel dili daha net hale getirildi. Son UX duzenine uygun metinler guncellendi.
-- `main.js` | Electron source calisma sirasinda gorulen `EPIPE / broken pipe` hatalarini sessizce tolere edecek ana surec korumasi eklendi.
-- `src/depots/nevzat.js`, `src/depots/selcuk.js`, `src/depots/sentez.js`, `src/depots/alliance.js`, `src/depots/anadolu-itriyat.js` | Debug loglar production akisinda ana sureci bozmayacak sekilde `ECZANE_DEBUG=1` arkasina alindi.
+- `renderer/scripts/app.js` | Arama sonucunda varsayilan secili plan teklifi yeniden en ucuz teklif olacak sekilde duzeltildi; depo satirina ayri `Plana Sec` butonu eklendi; satir tiklama ve buton tiklama ayni secimi koruyor; gorunen bozuk para birimi karakterleri `TL` tabanli gosterime cekildi; MF sonucu once fallback sonra canli fiyat ile yeniden ciziliyor
+- `renderer/styles/main.css` | `btn-plan-select`, `depot-actions` ve `sc-live-badge` stilleri eklendi; sahte `Click ile plana ekle` pseudo metni kaldirildi
+- `src/server.js` | `POST /api/quote-option` endpoint'i ile quantity bazli canli fiyat sorgusu acildi
+- `src/depots/selcuk.js` | `quoteOption()` ile miktar bazli fiyat hesaplama acildi
+- `src/depots/nevzat.js` | `quoteOption()` ile miktar bazli fiyat hesaplama acildi
+- `src/depots/alliance.js` | `quoteOption()` ve `calculatePrice()` zinciri eklendi; canli fiyat icin gereken ham alanlar artik saklaniyor
+- `AI_CONTEXT.md` | Quantity bazli canli fiyat, Chrome zorunlulugu ve secili depo davranisi not edildi
+- `AI_AGENT_HANDOFF.md` | Sonraki agent icin guncel riskler ve dogru devam noktasi yazildi
 
 **[ADDED/REMOVED]**
-- **ADDED:** Daha stabil urun hissi icin yumusatilmis shadow/border sistemi, daha guven veren arka plan katmanlari ve sakinlestirilmis aksiyon stilleri.
-- **ADDED:** Sonuc ekraninda secilen depo ile diger depo tekliflerini birlikte gosterip secili satiri farkli tonla ayiran tablo davranisi.
-- **ADDED:** Barkod tabanli siparis plani kisitlamasi; barkodsuz kalemler plan tarafina alinmiyor.
+- **ADDED:** Teklif tablosunda ayri `Plana Sec` butonu
+- **ADDED:** Selcuk, Nevzat ve Alliance icin quantity bazli canli quote altyapisi
+- **ADDED:** MF panelinde fallback-first, live-rerender akisi
+- **REMOVED:** MF satirlarina CSS ile eklenen `Click ile plana ekle` metni
+- **REMOVED:** Gorunen mojibake para birimi gosterimleri
 
 **[CRITICAL_WARNINGS_FOR_NEXT_AI]**
-- Bu turdaki ana hedef "buyuk urun sirketi hissi" ve "stabil karar yuzeyi" idi. Yeni UI degisikliklerinde sadece renk oynamak yerine bilgi hiyerarsisi, spacing ve urun dili ayni sistem icinde korunmali.
-- `renderer/index.html` dosyasinda eski bozuk karakterli statik metinler bulunabiliyor; gosterilen son duzgun metinler `renderer/scripts/app.js` icindeki `applyHumanUiCopy()` tarafindan runtime'da duzeltiliyor. Yeni bir genel encoding temizligi yapilacaksa bu katman dikkatlice sadeleştirilmeli.
+1. Electron icinde depo login kalici degil; `Depoya Git` davranisi Chrome tabanli kalmali.
+2. Varsayilan plan secimi en ucuz tekliften gelir ama kullanici secimi `currentSelectedOfferKey` uzerinden korunur.
+3. MF paneli canli fiyat alamazsa fallback liste gorunmeye devam etmeli; UI asla bos kalmamali.
+4. Yeni gorunen UI metinlerini ASCII-safe tutmak daha guvenli; eski arsivlerde mojibake olabilir.
+
+---
+
+### @ARCHIVED_CHANGE_017
+**TIMESTAMP:** 2026-04-03T00:45:00
+**SESSION:** v2.1.1 - Chrome Tabanli Depo Gecisi Temizligi
+**AGENT:** Codex
+
+**[SUMMARY]**
+- `Chrome Demo` karti kaldirildi.
+- `Depoya Git` akisi tekrar kalici olarak Chrome tabanli hale getirildi.
+- Alliance icin auto-post denemeleri temizlenip `QuickOrder` fallback'i birakildi.
+
+---
+
+### @ARCHIVED_CHANGE_016
+**TIMESTAMP:** 2026-04-02T23:40:00
+**SESSION:** v2.1.1 - Inline Siparis Miktari + MF Depo Tiklama
+**AGENT:** Codex
+
+**[SUMMARY]**
+- Hizli islem paneline plan miktari kontrolu eklendi.
+- MF sonuc satirlari tiklanabilir hale getirildi.
+- `setSearchActionQty()` miktar alanlarini senkron tutan merkezi helper olarak kullanildi.
+### @LATEST_CHANGE_2026_04_03_0128
+**TIMESTAMP:** 2026-04-03T01:28:00
+**SESSION:** v2.1.1 - Plan Akisi Stabilizasyonu + Bos Ekran Koruma + Turkce UI Temizligi
+**AGENT:** Codex
+
+**[MODIFIED_FILES]**
+- `renderer/scripts/app.js` | Arama bos ekran bug'i icin gecikmeli rerender korumasi eklendi; config yukleme hatasi kontrollu ele alindi; eksik kalan `addPlannerOptionToOrderPlan` ve `removeOrderPlanItem` geri eklendi; plan ekleme akisi tekrar baglandi; plan kayitlari istenen adet mantigina normalize edildi; ana plan ve detay plan ekranlari `adet` tabanli gosterime cekildi; detay kartlari tiklanabilir yapildi; detay ekrana `Sil` butonu eklendi
+- `renderer/scripts/auth.js` | Login ve setup overlay metinleri runtime tarafinda dogru Turkce metinlerle duzeltildi
+- `renderer/styles/main.css` | Plan detay kartlari icin tiklanabilir hover/focus stilleri eklendi; plan detay aksiyonlari sarilabilir hale getirildi
+- `AI_CONTEXT.md` | Son davranislar, riskler ve quantity mantigi not edildi
+- `AI_AGENT_HANDOFF.md` | Sonraki agent icin guncel devam noktasi ve beklenen davranis yazildi
+
+**[ADDED/REMOVED]**
+- **ADDED:** Arama sonucunda minimum bekleme suresi sonrasi otomatik rerender fallback'i
+- **ADDED:** Eksik kalan plan ekleme ve plan silme merkezi fonksiyonlari
+- **ADDED:** Plan detay ekraninda tiklanabilir kart davranisi
+- **ADDED:** Plan detay ekraninda `Sil` aksiyonu
+- **REMOVED:** Plan ekranindaki kafa karistiran `hedef / teslim` gosterimi
+
+**[CRITICAL_WARNINGS_FOR_NEXT_AI]**
+1. Electron icinde depo login kalici degil; `Depoya Git` davranisi Chrome tabanli kalmali.
+2. Siparis plani artik kampanya batch miktarini degil, kullanicinin istedigi adedi saklar ve gosterir.
+3. `renderer/scripts/app.js` buyuk ve stateful; arama/render zincirindeki syntax hatalari tum ekrani bos gosterebilir.
+4. Runtime Turkce metin duzeltmeleri var; static HTML icinde hala eski bozuk yazi kalintilari olabilir.
+
+---

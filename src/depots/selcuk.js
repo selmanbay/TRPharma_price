@@ -1,4 +1,4 @@
-const axios = require('axios');
+﻿const axios = require('axios');
 
 const BASE_URL = 'https://webdepo.selcukecza.com.tr';
 
@@ -13,6 +13,10 @@ const AJAX_HEADERS = {
   'x-requested-with': 'XMLHttpRequest',
 };
 
+const AXIOS_NO_PROXY = {
+  proxy: false,
+};
+
 class SelcukDepot {
   constructor(credentials) {
     // credentials: { hesapKodu, kullaniciAdi, sifre }
@@ -22,7 +26,7 @@ class SelcukDepot {
   }
 
   /**
-   * Cookie string'inden belirli bir cookie değerini çıkarır
+   * Cookie string'inden belirli bir cookie deÄŸerini Ã§Ä±karÄ±r
    */
   _extractCookies(setCookieHeaders) {
     if (!setCookieHeaders) return '';
@@ -31,34 +35,35 @@ class SelcukDepot {
   }
 
   /**
-   * ASP.NET login formu ile giriş yap.
-   * 1) GET /Login.aspx → session cookie + __VIEWSTATE al
-   * 2) POST /Login.aspx → form data gönder → auth cookie'leri al
+   * ASP.NET login formu ile giriÅŸ yap.
+   * 1) GET /Login.aspx â†’ session cookie + __VIEWSTATE al
+   * 2) POST /Login.aspx â†’ form data gÃ¶nder â†’ auth cookie'leri al
    */
   async login() {
     if (this.cookies) return { success: true };
 
     const { hesapKodu, kullaniciAdi, sifre } = this.credentials;
     if (!hesapKodu || !kullaniciAdi || !sifre) {
-      return { success: false, error: 'Hesap kodu, kullanıcı adı ve şifre gerekli' };
+      return { success: false, error: 'Hesap kodu, kullanÄ±cÄ± adÄ± ve ÅŸifre gerekli' };
     }
 
     try {
-      // 1) Login sayfasını al → session cookie + __VIEWSTATE
+      // 1) Login sayfasÄ±nÄ± al â†’ session cookie + __VIEWSTATE
       const pageRes = await axios.get(`${BASE_URL}/Login.aspx`, {
         headers: { 'user-agent': COMMON_HEADERS['user-agent'] },
         timeout: 6000,
+        ...AXIOS_NO_PROXY,
       });
 
       const sessionCookies = this._extractCookies(pageRes.headers['set-cookie']);
       const html = pageRes.data;
 
-      // __VIEWSTATE ve __VIEWSTATEGENERATOR'ı HTML'den çek
+      // __VIEWSTATE ve __VIEWSTATEGENERATOR'Ä± HTML'den Ã§ek
       const vsMatch = html.match(/name="__VIEWSTATE"[^>]*value="([^"]*)"/);
       const vsgMatch = html.match(/name="__VIEWSTATEGENERATOR"[^>]*value="([^"]*)"/);
 
       if (!vsMatch) {
-        return { success: false, error: 'Login sayfası parse edilemedi' };
+        return { success: false, error: 'Login sayfasÄ± parse edilemedi' };
       }
 
       // 2) Login POST
@@ -68,7 +73,7 @@ class SelcukDepot {
         txtEczaneKodu: hesapKodu,
         txtKullaniciAdi: kullaniciAdi,
         txtSifre: sifre,
-        btnGiris: 'Giriş',
+        btnGiris: 'GiriÅŸ',
       }).toString();
 
       const loginRes = await axios.post(`${BASE_URL}/Login.aspx`, formData, {
@@ -81,19 +86,20 @@ class SelcukDepot {
         maxRedirects: 0,
         validateStatus: (s) => s >= 200 && s < 400,
         timeout: 6000,
+        ...AXIOS_NO_PROXY,
       });
 
       const loginCookies = this._extractCookies(loginRes.headers['set-cookie']);
 
       if (!loginCookies || !loginCookies.includes('BoyutAuth')) {
-        return { success: false, error: 'Giriş başarısız — kullanıcı adı veya şifre hatalı olabilir' };
+        return { success: false, error: 'GiriÅŸ baÅŸarÄ±sÄ±z â€” kullanÄ±cÄ± adÄ± veya ÅŸifre hatalÄ± olabilir' };
       }
 
-      // Cookie'leri birleştir
+      // Cookie'leri birleÅŸtir
       this.cookies = sessionCookies + '; ' + loginCookies;
       return { success: true };
     } catch (err) {
-      return { success: false, error: `Login hatası: ${err.message}` };
+      return { success: false, error: `Login hatasÄ±: ${err.message}` };
     }
   }
 
@@ -105,14 +111,14 @@ class SelcukDepot {
   }
 
   /**
-   * Cookie'leri temizle (re-login için)
+   * Cookie'leri temizle (re-login iÃ§in)
    */
   clearCookies() {
     this.cookies = null;
   }
 
   /**
-   * İlaç arama — barkod veya isim ile
+   * Ä°laÃ§ arama â€” barkod veya isim ile
    */
   async search(query) {
     if (!this.cookies) {
@@ -145,14 +151,15 @@ class SelcukDepot {
             referer: `${BASE_URL}/Siparis/hizlisiparis.aspx`,
           },
           timeout: 6000,
+          ...AXIOS_NO_PROXY,
         }
       );
 
       const data = res.data;
 
-      // Session expire olmuşsa re-login dene
+      // Session expire olmuÅŸsa re-login dene
       if (data.hataId && data.hataId !== 0) {
-        // İlk denemede hata aldıysa cookie'leri temizleyip tekrar login dene
+        // Ä°lk denemede hata aldÄ±ysa cookie'leri temizleyip tekrar login dene
         this.clearCookies();
         const loginResult = await this.login();
         if (!loginResult.success) {
@@ -193,6 +200,7 @@ class SelcukDepot {
             referer: `${BASE_URL}/Siparis/hizlisiparis.aspx`,
           },
           timeout: 6000,
+          ...AXIOS_NO_PROXY,
         }
       );
       const parsed = this._parseResults(res.data);
@@ -202,31 +210,59 @@ class SelcukDepot {
     }
   }
 
-  /**
-   * Gerçek fiyat hesaplama — IlacFiyatHesapla action'u ile net tutar al
-   * Etiket fiyatı değil, iskontolar+KDV dahil eczacının gerçek maliyetini döndürür
-   */
-  async calculatePrice(kod, ilacTip, etiketFiyati, satisSekli = 'A6', miktar = '1') {
+  _normalizeEtiketFiyati(etiketFiyati) {
+    return String(etiketFiyati || '').trim();
+  }
+
+  _normalizeOnerilenFiyat(etiketFiyati) {
+    return this._normalizeEtiketFiyati(etiketFiyati).replace(/\./g, '').replace(',', '.');
+  }
+
+  _buildPriceRequestParams(kod, ilacTip, etiketFiyati, satisSekli, miktar) {
+    const normalizedEtiketFiyati = this._normalizeEtiketFiyati(etiketFiyati);
+    return {
+      action: 'IlacFiyatHesapla',
+      kod: String(kod || '').trim(),
+      miktar: String(Math.max(parseInt(miktar, 10) || 1, 1)),
+      satisSekli: satisSekli || 'A6',
+      etiketFiyati: normalizedEtiketFiyati,
+      miad: 'undefined',
+      onerilenFiyat: this._normalizeOnerilenFiyat(normalizedEtiketFiyati),
+      ILACTIP: ilacTip || 'B',
+      ekstraMf: '',
+      ekstraIskonto: '',
+    };
+  }
+
+  _normalizePriceResponse(rawQuote, requestedQty) {
+    if (!rawQuote) return null;
+
+    const safeRequestedQty = Math.max(parseInt(requestedQty, 10) || 1, 1);
+    const totalCost = Number(rawQuote.netTutar || 0);
+    if (!(totalCost > 0)) return null;
+
+    return {
+      requestedQty: safeRequestedQty,
+      totalCost,
+      effectiveUnit: totalCost / safeRequestedQty,
+      receiveQty: Math.max(parseInt(rawQuote.toplamMiktar, 10) || safeRequestedQty, 1),
+      raw: rawQuote,
+    };
+  }
+
+  async _requestSelcukPrice(kod, ilacTip, etiketFiyati, satisSekli = 'A6', miktar = '1') {
     if (!this.cookies) return null;
+
+    const params = this._buildPriceRequestParams(kod, ilacTip, etiketFiyati, satisSekli, miktar);
+
     try {
-      // etiketFiyati Turkish format: "99,93" veya "1.299,93"
-      // onerilenFiyat dot format: "99.93" veya "1299.93"
-      const onerilenFiyat = etiketFiyati.replace(/\./g, '').replace(',', '.');
-      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK calculatePrice] kod=${kod} satisSekli=${satisSekli} etiket=${etiketFiyati} onerilen=${onerilenFiyat}`);
+      if (process.env.ECZANE_DEBUG === '1') {
+        console.log(`[SELCUK price] kod=${params.kod} miktar=${params.miktar} satisSekli=${params.satisSekli} etiket=${params.etiketFiyati} onerilen=${params.onerilenFiyat}`);
+      }
+
       const res = await axios.post(
         `${BASE_URL}/Ilac/IlacGetir-ajax.aspx`,
-        new URLSearchParams({
-          action: 'IlacFiyatHesapla',
-          kod: kod,
-          miktar: String(miktar || '1'),
-          satisSekli: satisSekli,
-          etiketFiyati: etiketFiyati,
-          miad: 'undefined',
-          onerilenFiyat: onerilenFiyat,
-          ILACTIP: ilacTip || 'B',
-          ekstraMf: '',
-          ekstraIskonto: '',
-        }).toString(),
+        new URLSearchParams(params).toString(),
         {
           headers: {
             ...AJAX_HEADERS,
@@ -235,29 +271,99 @@ class SelcukDepot {
             referer: `${BASE_URL}/Siparis/hizlisiparis.aspx`,
           },
           timeout: 6000,
+          ...AXIOS_NO_PROXY,
         }
       );
-      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK calculatePrice] response hataId=${res.data.hataId} netTutar=${res.data.obj?.netTutar}`);
+
+      if (process.env.ECZANE_DEBUG === '1') {
+        console.log(`[SELCUK price] response hataId=${res.data.hataId} netTutar=${res.data.obj?.netTutar}`);
+      }
+
       if (res.data.hataId === 0 && res.data.obj) {
         return {
-          netTutar: res.data.obj.netTutar,
-          birimFiyat: res.data.obj.birimFiyat,
-          depocuFiyati: res.data.obj.depocuFiyati,
-          toplamMiktar: res.data.obj.toplamMiktar,
-          malFazlasi: res.data.obj.malFazlasi,
+          netTutar: Number(res.data.obj.netTutar || 0),
+          birimFiyat: Number(res.data.obj.birimFiyat || 0),
+          depocuFiyati: Number(res.data.obj.depocuFiyati || 0),
+          toplamMiktar: Number(res.data.obj.toplamMiktar || 0),
+          malFazlasi: Number(res.data.obj.malFazlasi || 0),
+          raw: res.data.obj,
+          request: params,
         };
       }
+
       return null;
     } catch (err) {
-      console.error(`[SELÇUK calculatePrice] HATA:`, err.message);
+      console.error(`[SELCUK price] HATA:`, err.message);
       return null;
     }
+  }
+
+  async selcukBirim(kod, ilacTip, etiketFiyati, satisSekli = 'A6') {
+    const rawQuote = await this._requestSelcukPrice(kod, ilacTip, etiketFiyati, satisSekli, '1');
+    const normalized = this._normalizePriceResponse(rawQuote, 1);
+    return normalized ? { ...normalized, kind: 'birim' } : null;
+  }
+
+  async selcukMf(kod, ilacTip, etiketFiyati, satisSekli = 'A6', miktar = '1') {
+    const safeQty = Math.max(parseInt(miktar, 10) || 1, 1);
+    const rawQuote = await this._requestSelcukPrice(kod, ilacTip, etiketFiyati, satisSekli, String(safeQty));
+    const normalized = this._normalizePriceResponse(rawQuote, safeQty);
+    return normalized ? { ...normalized, kind: 'mf' } : null;
+  }
+
+  _parseMf(mfStr) {
+    if (!mfStr) return null;
+    const match = String(mfStr).match(/(\d+)\s*\+\s*(\d+)/);
+    if (!match) return null;
+    const buy = parseInt(match[1], 10);
+    const free = parseInt(match[2], 10);
+    if (buy <= 0 || free <= 0) return null;
+    return { buy, free, total: buy + free };
+  }
+
+  async quoteOption(item, option = {}, targetQty = 1) {
+    if (!item?.kodu) return null;
+
+    const requestedQty = Math.max(parseInt(targetQty, 10) || parseInt(option.orderQty, 10) || 1, 1);
+    const etiketFiyati = item.etiketFiyat || item.fiyat;
+    const satisSekli = item._satisSekli || 'A6';
+    const quote = await this.selcukMf(
+      item.kodu,
+      item.ilacTip,
+      etiketFiyati,
+      satisSekli,
+      String(requestedQty)
+    );
+
+    if (!quote) return null;
+
+    const mfStr = quote.malFazlasi || option.mfStr || item.malFazlasi || '';
+    const mf = this._parseMf(mfStr);
+    const receiveQty = quote.receiveQty;
+    const orderQty = requestedQty;
+    const totalCost = quote.totalCost;
+    const effectiveUnit = quote.effectiveUnit;
+
+    return {
+      depot: item.depot || this.name,
+      depotId: item.depotId || 'selcuk',
+      depotUrl: item.depotUrl || '',
+      mf: mf || null,
+      mfStr,
+      orderQty,
+      receiveQty,
+      totalCost,
+      effectiveUnit,
+      unitPrice: Number(effectiveUnit || item.fiyatNum || 0),
+      ad: item.ad,
+      pricingMode: 'live',
+    };
   }
 
   async _fetchMFAndReturn(resultsArray) {
       const topItems = resultsArray.slice(0, 10);
 
-      // AŞAMA 1: GetIlacDetay — MF verisi + satisSekli al
+      // AÅAMA 1: GetIlacDetay â€” MF verisi + satisSekli al
       const detailPromises = topItems.map(item => {
          return this.getProductDetail(item.kodu, item.ilacTip).catch(e => null);
       });
@@ -267,6 +373,8 @@ class SelcukDepot {
       details.forEach((d, i) => {
          if (d) {
             if (d.barkod) topItems[i].barkod = d.barkod;
+            topItems[i]._satisSekli = d.kampanyalar?.[0]?.satisSekli || 'A6';
+            topItems[i].etiketFiyat = d.kampanyalar?.[0]?.etiketFiyati || topItems[i].etiketFiyat || topItems[i].fiyat;
             
             if (d.kampanyalar && d.kampanyalar.length > 0) {
                let mfs = [];
@@ -287,27 +395,27 @@ class SelcukDepot {
          }
       });
 
-      // AŞAMA 2: IlacFiyatHesapla — Gerçek net tutar al
-      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK] Aşama 2: ${topItems.length} ürün için fiyat hesaplama başlıyor...`);
+      // AÅAMA 2: IlacFiyatHesapla â€” arama ekraninda tekli baz fiyat al
+      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÃ‡UK] AÅŸama 2: ${topItems.length} Ã¼rÃ¼n iÃ§in fiyat hesaplama baÅŸlÄ±yor...`);
       const pricePromises = topItems.map((item, i) => {
         const detail = details[i];
         const satisSekli = detail?.kampanyalar?.[0]?.satisSekli || 'A6';
-        const primaryMf = String(item.malFazlasi || '').match(/(\d+)\s*\+\s*(\d+)/);
-        const miktar = primaryMf ? String(parseInt(primaryMf[1], 10) + parseInt(primaryMf[2], 10)) : '1';
-        if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÇUK] item[${i}] kodu=${item.kodu} fiyat=${item.fiyat} satisSekli=${satisSekli} detail=${!!detail}`);
-        return this.calculatePrice(item.kodu, item.ilacTip, item.fiyat, satisSekli, miktar)
+        const etiketFiyati = detail?.kampanyalar?.[0]?.etiketFiyati || item.etiketFiyat || item.fiyat;
+        if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÃ‡UK] item[${i}] kodu=${item.kodu} etiket=${etiketFiyati} satisSekli=${satisSekli} miktar=1 detail=${!!detail}`);
+        return this.selcukBirim(item.kodu, item.ilacTip, etiketFiyati, satisSekli)
           .catch(() => null);
       });
       const prices = await Promise.all(pricePromises);
 
-      // Net Tutar ile fiyat güncelle
+      // Net Tutar ile fiyat gÃ¼ncelle
       prices.forEach((p, i) => {
-        if (p && Number(p.birimFiyat) > 0) {
+        if (p && Number(p.totalCost) > 0) {
+          const unitGrossPrice = Number(p.totalCost || 0);
           topItems[i].etiketFiyat = topItems[i].fiyat; // Orijinali sakla
-          topItems[i].fiyatNum = parseFloat(Number(p.birimFiyat).toFixed(2));
-          topItems[i].fiyat = Number(p.birimFiyat).toFixed(2).replace('.', ',');
-          topItems[i].selcukNetTutar = Number(p.netTutar || 0);
-          topItems[i].selcukToplamMiktar = Number(p.toplamMiktar || 0);
+          topItems[i].fiyatNum = parseFloat(unitGrossPrice.toFixed(2));
+          topItems[i].fiyat = unitGrossPrice.toFixed(2).replace('.', ',');
+          topItems[i].selcukNetTutar = Number(p.totalCost || 0);
+          topItems[i].selcukToplamMiktar = Number(p.receiveQty || 0);
         }
       });
 
@@ -328,7 +436,7 @@ class SelcukDepot {
         fiyatNum: parseFloat(u.fiyat.replace('.', '').replace(',', '.')),
         stok: u.stok,
         // stokDurumu: 1 = stokta var, 0 = stokta yok
-        // stok sayısı her zaman güvenilir değil (stokGosterilsin: false olabilir)
+        // stok sayÄ±sÄ± her zaman gÃ¼venilir deÄŸil (stokGosterilsin: false olabilir)
         stokVar: u.stokDurumu === 1,
         stokGosterilsin,
         ilacTip: u.ILACTIP,
@@ -337,7 +445,7 @@ class SelcukDepot {
       })),
     };
   }
-  // İlaç detay sayfasından barkod dahil bilgi getir
+  // Ä°laÃ§ detay sayfasÄ±ndan barkod dahil bilgi getir
   async getProductDetail(kod, ilacTip) {
     if (!this.cookies) return null;
     try {
@@ -362,6 +470,7 @@ class SelcukDepot {
             referer: `${BASE_URL}/Siparis/hizlisiparis.aspx`,
           },
           timeout: 6000,
+          ...AXIOS_NO_PROXY,
         }
       );
       const data = res.data;
@@ -382,3 +491,4 @@ class SelcukDepot {
 }
 
 module.exports = SelcukDepot;
+
