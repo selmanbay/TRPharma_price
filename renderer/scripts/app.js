@@ -1,16 +1,32 @@
 ﻿const API_BASE = 'http://localhost:3000';
 
 // -- Global error reporting (sessiz kirilmalari konsola ceker) --
+const DIAGNOSTIC_BUFFER_LIMIT = 120;
+
+const diagnosticsBuffer = [];
+let diagnosticsSequence = 0;
+let latestUpdatePayload = null;
+let updateStatusBridgeBound = false;
+let activeSettingsTab = 'general';
+let lastSearchAttempt = { query: '', timestamp: 0 };
+let searchUiState = 'idle';
+let searchErrorState = null;
+
 window.addEventListener('error', function(e) {
   console.error('[GlobalError]', e.message, e.filename + ':' + e.lineno);
+  pushDiagnosticEvent('renderer-error', e.message || 'Bilinmeyen renderer hatası', {
+    filename: e.filename || '',
+    line: e.lineno || 0,
+  });
 });
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[UnhandledPromise]', e.reason);
+  pushDiagnosticEvent('renderer-promise', String(e.reason?.message || e.reason || 'Unhandled promise'));
 });
 
 
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Title bar controls Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Title bar controls ────
 if (window.electronAPI) {
   document.getElementById('tbMinimize').addEventListener('click', () => window.electronAPI.minimize());
   document.getElementById('tbMaximize').addEventListener('click', () => window.electronAPI.maximize());
@@ -25,16 +41,54 @@ if (window.electronAPI) {
     }
   });
 } else {
-  // TarayÃ„Â±cÃ„Â± ortamÃ„Â±nda (Localhost:3000 Web) ÃƒÂ§alÃ„Â±Ã…Å¸Ã„Â±yorsa Electron ÃƒÂ¶zel Titlebar'Ã„Â± gizle
+  // Tarayıcı ortamında (Localhost:3000 Web) çalışıyorsa Electron özel Titlebar'ı gizle
   const titlebar = document.getElementById('titlebar');
   if (titlebar) titlebar.style.display = 'none';
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Navigation with transitions Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Navigation with transitions ────
 let currentPage = 'home';
+
+function pushDiagnosticEvent(type, message, meta = {}) {
+  diagnosticsSequence += 1;
+  diagnosticsBuffer.unshift({
+    id: diagnosticsSequence,
+    type,
+    message,
+    meta,
+    timestamp: Date.now(),
+  });
+  if (diagnosticsBuffer.length > DIAGNOSTIC_BUFFER_LIMIT) diagnosticsBuffer.length = DIAGNOSTIC_BUFFER_LIMIT;
+  if (currentPage === 'settings' && activeSettingsTab === 'developer') {
+    renderSettings();
+  }
+}
+
+function getDiagnosticsSnapshot() {
+  return diagnosticsBuffer.slice();
+}
+
+function clearDiagnosticsBuffer() {
+  diagnosticsBuffer.length = 0;
+  diagnosticsSequence = 0;
+}
+
+function setupElectronDiagnosticsBridge() {
+  if (updateStatusBridgeBound || !window.electronAPI?.onUpdateStatus) return;
+  updateStatusBridgeBound = true;
+  window.electronAPI.onUpdateStatus((payload) => {
+    latestUpdatePayload = payload || null;
+    pushDiagnosticEvent('updater', payload?.phase || 'unknown', payload || {});
+    if (currentPage === 'settings') renderSettings();
+  });
+}
 
 function showPage(name) {
   if (name === currentPage) return;
+
+  if (name !== 'order-plan' && planEditorDrawerState.open) {
+    closePlanEditorDrawer();
+  }
 
   const fromPage = document.getElementById('page-' + currentPage);
   const toPage = document.getElementById('page-' + name);
@@ -91,7 +145,7 @@ function showPage(name) {
   }, isBack ? 180 : 200);
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Profile menu Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Profile menu ────
 function toggleProfileMenu() {
   document.querySelector('.profile-wrapper').classList.toggle('open');
 }
@@ -104,6 +158,28 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.profile-wrapper')) {
     closeProfileMenu();
   }
+});
+
+document.getElementById('profileHistoryBtn')?.addEventListener('click', () => {
+  showPage('history');
+  closeProfileMenu();
+});
+
+document.getElementById('profileSettingsBtn')?.addEventListener('click', () => {
+  showPage('settings');
+  closeProfileMenu();
+});
+
+document.getElementById('profileQuitBtn')?.addEventListener('click', () => {
+  closeProfileMenu();
+  if (window.electronAPI?.quitApp) {
+    window.electronAPI.quitApp();
+  }
+});
+
+document.getElementById('profileLogoutBtn')?.addEventListener('click', () => {
+  closeProfileMenu();
+  logout();
 });
 
 function homeSearch() {
@@ -134,8 +210,9 @@ document.getElementById('searchInput').addEventListener('keydown', e => {
     doSearch();
   }
 });
+bindSearchErrorActions();
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Keyboard shortcuts Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Keyboard shortcuts ────
 document.addEventListener('keydown', e => {
   if (e.ctrlKey && e.key === 'f') {
     e.preventDefault();
@@ -146,7 +223,9 @@ document.addEventListener('keydown', e => {
     }
   }
   if (e.key === 'Escape') {
-    if (document.getElementById('depotPanel').classList.contains('open')) {
+    if (document.getElementById('planEditorPanel')?.classList.contains('open')) {
+      closePlanEditorDrawer();
+    } else if (document.getElementById('depotPanel').classList.contains('open')) {
       closeDepotPanel();
     } else if (currentPage !== 'home') {
       showPage('home');
@@ -158,12 +237,111 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Search Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Search ────
 let selectedBarcode = null;
 let selectedVariant = null;
 let currentDetailItems = [];
 let currentDetailQuery = '';
 let currentSelectedOfferKey = '';
+let activePlanDetailEditorKey = '';
+const planEditorDrawerState = {
+  open: false,
+  loading: false,
+  error: '',
+  key: '',
+  depot: '',
+  qty: 1,
+  name: '',
+  barcode: '',
+  items: [],
+  options: [],
+  selectedKey: '',
+  userSelected: false,
+  quoteVersion: 0,
+};
+
+function resetSearchDetailState() {
+  currentDetailItems = [];
+  currentDetailQuery = '';
+  currentSelectedOfferKey = '';
+  const actionQtyInput = document.getElementById('searchActionQtyInput');
+  if (actionQtyInput) actionQtyInput.value = '1';
+}
+
+function hideSearchResultSections() {
+  document.getElementById('variantSelectionLayer').style.display = 'none';
+  document.getElementById('productCard').style.display = 'none';
+  document.getElementById('bestPriceCard').style.display = 'none';
+  document.getElementById('searchActionPanel').style.display = 'none';
+  document.getElementById('otherDepots').style.display = 'none';
+  setSearchInlineLoading(false);
+  document.getElementById('stockCalcPanel').classList.remove('open');
+  document.getElementById('stockCalcTrigger').style.display = 'none';
+  document.getElementById('stockCalcTrigger').classList.remove('open');
+}
+
+function clearSearchErrorState() {
+  searchErrorState = null;
+  const card = document.getElementById('searchErrorCard');
+  const authBtn = document.getElementById('searchAuthBtn');
+  if (card) card.style.display = 'none';
+  if (authBtn) authBtn.style.display = 'none';
+}
+
+function setSearchInlineLoading(visible, text = 'Diger depo teklifleri yukleniyor...') {
+  const el = document.getElementById('searchInlineLoading');
+  if (!el) return;
+  const textEl = el.querySelector('span');
+  if (textEl) textEl.textContent = text;
+  el.style.display = visible ? 'flex' : 'none';
+}
+
+function classifySearchFailure(error) {
+  const status = Number(error?.status) || 0;
+  if (status === 401 || error?.type === 'auth') {
+    return {
+      type: 'auth',
+      title: 'Oturum yenilenmeli',
+      message: 'Oturum doğrulaması sona ermiş olabilir. Giriş ekranını açıp tekrar deneyin.',
+    };
+  }
+  if (error?.type === 'timeout') {
+    return {
+      type: 'network',
+      title: 'Arama zaman aşımına uğradı',
+      message: 'Depolar zamanında yanıt vermedi. Bağlantınızı kontrol edip tekrar deneyin.',
+    };
+  }
+  return {
+    type: 'network',
+    title: 'Sonuçlar yüklenemedi',
+    message: 'Depolardan sonuç alınamadı. Tekrar deneyin.',
+  };
+}
+
+function showSearchErrorState(errorInfo) {
+  searchUiState = 'error';
+  searchErrorState = errorInfo;
+  const card = document.getElementById('searchErrorCard');
+  const title = document.getElementById('searchErrorTitle');
+  const message = document.getElementById('searchErrorMessage');
+  const authBtn = document.getElementById('searchAuthBtn');
+  if (title) title.textContent = errorInfo?.title || 'Sonuçlar yüklenemedi';
+  if (message) message.textContent = errorInfo?.message || 'Tekrar deneyin.';
+  if (authBtn) authBtn.style.display = errorInfo?.type === 'auth' ? 'inline-flex' : 'none';
+  if (card) card.style.display = 'block';
+}
+
+function bindSearchErrorActions() {
+  document.getElementById('searchRetryBtn')?.addEventListener('click', () => {
+    if (!lastSearchAttempt.query) return;
+    document.getElementById('searchInput').value = lastSearchAttempt.query;
+    doSearch();
+  });
+  document.getElementById('searchAuthBtn')?.addEventListener('click', () => {
+    if (typeof showAuthOverlay === 'function') showAuthOverlay('login');
+  });
+}
 
 const STORAGE_KEYS = {
   orderPlan: 'eczane.orderPlan.v1',
@@ -402,6 +580,8 @@ function dedupeSearchItems(items, query = '') {
 let searchStartTime = 0;
 const MIN_GATHER_TIME = 1500; // 1.5 saniye bekle ki kartlar ziplamasm
 let pendingSearchRenderTimer = null;
+let pendingSearchWatchdogTimer = null;
+const SEARCH_WATCHDOG_MS = 8000;
 
 // Faz 2 - Render batching: depo yanitlari tek noktal gelirse 120ms throttle ile birlestir
 const RENDER_BATCH_MS = 120;
@@ -448,11 +628,12 @@ async function doSearch() {
     input.value = cleanBarcode;
   }
 
-  // 300ms iÃƒÂ§inde aynÃ„Â± arama geldiyse (karekod hÃ„Â±zÃ„Â±) blokla
+  // 300ms icinde ayni arama geldiyse (karekod hizi) blokla
   if (query === lastSearchQuery && (nowTime - lastSearchTime < 300)) return;
   
   lastSearchQuery = query;
   lastSearchTime = nowTime;
+  lastSearchAttempt = { query, timestamp: nowTime };
   selectedVariant = null;
   searchStartTime = nowTime;
   selectedBarcode = null; 
@@ -460,22 +641,31 @@ async function doSearch() {
 
   const loading = document.getElementById('loading');
   const status = document.getElementById('statusMsg');
+  clearSearchErrorState();
   if (pendingSearchRenderTimer) {
     clearTimeout(pendingSearchRenderTimer);
     pendingSearchRenderTimer = null;
   }
 
+  searchUiState = 'loading';
   loading.style.display = 'block';
   status.textContent = 'Sonuçlar aranıyor...';
   status.className = 'status-msg';
+  pushDiagnosticEvent('search-start', `Arama başlatıldı: ${query}`, { query });
 
   if (!cachedConfig) {
     await loadDepotStatus();
   }
   if (!cachedConfig || !cachedConfig.depots) {
+    searchUiState = 'error';
     loading.style.display = 'none';
-    status.textContent = 'Depo ayarları yüklenemedi. Lütfen tekrar deneyin.';
+    status.textContent = 'Depo ayarlari yuklenemedi. Lutfen tekrar deneyin.';
     status.className = 'status-msg error';
+    showSearchErrorState({
+      type: 'network',
+      title: 'Depo ayarlari okunamadi',
+      message: 'Ayarlar yuklenemedi. Birkac saniye sonra tekrar deneyin.',
+    });
     return;
   }
 
@@ -485,8 +675,14 @@ async function doSearch() {
   });
 
   if (activeDepots.length === 0) {
+    searchUiState = 'error';
     loading.style.display = 'none';
-    status.textContent = 'Ayarlanmış depo bulunamadı.';
+    status.textContent = 'Ayarlanmis depo bulunamadi.';
+    showSearchErrorState({
+      type: 'network',
+      title: 'Aktif depo bulunamadi',
+      message: 'Once Ayarlar ekranindan en az bir depo baglantisi tanimlayin.',
+    });
     return;
   }
 
@@ -495,45 +691,38 @@ async function doSearch() {
 
   let allItems = [];
   let pendingReqs = activeDepots.length;
-
-  // Ekran titremesini önle: UI'ı sadece ilk 100ms'den sonra temizle (eğer sonuç yoksa)
-  setTimeout(() => {
-    if (searchId !== _activeSearchId) return; // Bu arama artık geçerli değil
-    if (Date.now() - searchStartTime >= 100) {
-      const resultsBody = document.getElementById('resultsBody');
-      if (resultsBody) resultsBody.innerHTML = '';
-    }
-  }, 100);
-
-  document.getElementById('variantSelectionLayer').style.display = 'none';
-  document.getElementById('productCard').style.display = 'none';
-  document.getElementById('bestPriceCard').style.display = 'none';
-  document.getElementById('searchActionPanel').style.display = 'none';
-  document.getElementById('otherDepots').style.display = 'none';
-  document.getElementById('stockCalcPanel').classList.remove('open');
-  document.getElementById('stockCalcTrigger').style.display = 'none';
-  document.getElementById('stockCalcTrigger').classList.remove('open');
-  currentDetailItems = [];
-  currentDetailQuery = '';
-  currentSelectedOfferKey = '';
-  const actionQtyInput = document.getElementById('searchActionQtyInput');
-  if (actionQtyInput) actionQtyInput.value = '1';
+  let successCount = 0;
+  let failureCount = 0;
+  const failures = [];
 
   activeDepots.forEach(depot => {
     authFetch(`${API_BASE}/api/search-depot?q=${encodeURIComponent(query)}&depotId=${depot.id}`)
-      .then(res => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const err = new Error(data?.error || `HTTP ${res.status}`);
+          err.status = res.status;
+          err.type = res.status === 401 ? 'auth' : 'network';
+          throw err;
+        }
+        return data;
+      })
       .then(data => {
-        // Eski arama yanıtı geldiyse sessizce yoksay
         if (searchId !== _activeSearchId) return;
 
+        if (data?.error) {
+          const err = new Error(data.error);
+          err.type = 'network';
+          throw err;
+        }
+
+        successCount++;
         if (!data.error && data.results && data.results.length > 0) {
           const depotUrl = data.depotUrl || '';
           data.results.forEach(r => { r.depotUrl = depotUrl; r.depotId = depot.id; });
-          // Faz 2: concat-only, sort/dedupe sadece render aninda yapilir
           allItems = allItems.concat(data.results);
           const isBarcode = isBarcodeQuery(query);
           scheduleRender(function() {
-            // Sort render aninda - her depoda degil
             return allItems.slice().sort(function(a, b) {
               if (a.fiyatNum === 0 && b.fiyatNum !== 0) return 1;
               if (b.fiyatNum === 0 && a.fiyatNum !== 0) return -1;
@@ -554,6 +743,15 @@ async function doSearch() {
       .catch(err => {
         if (searchId !== _activeSearchId) return;
         console.error(`${depot.name} error:`, err);
+        failureCount++;
+        failures.push({ depot: depot.name, error: err });
+        pushDiagnosticEvent('search-depot-error', `${depot.name} araması başarısız`, {
+          depotId: depot.id,
+          message: err?.message || String(err),
+          type: err?.type || 'network',
+          status: err?.status || 0,
+          query,
+        });
       })
       .finally(() => {
         pendingReqs--;
@@ -562,10 +760,43 @@ async function doSearch() {
           if (searchId === _activeSearchId) {
             loading.style.display = 'none';
             if (allItems.length === 0) {
-              status.textContent = 'Ilac bulunamadi (veya stokta yok).';
+              if (failureCount > 0 && successCount === 0) {
+                const classified = classifySearchFailure(failures[0]?.error || {});
+                status.textContent = '';
+                status.className = 'status-msg';
+                showSearchErrorState(classified);
+                pushDiagnosticEvent('search-error', `Arama hata durumuna düştü: ${query}`, {
+                  query,
+                  failureCount,
+                  activeDepots: activeDepots.length,
+                  reason: classified.type,
+                });
+              } else {
+                searchUiState = 'idle';
+                hideSearchResultSections();
+                currentDetailItems = [];
+                currentDetailQuery = '';
+                currentSelectedOfferKey = '';
+                const actionQtyInput = document.getElementById('searchActionQtyInput');
+                if (actionQtyInput) actionQtyInput.value = '1';
+                status.textContent = 'Ilac bulunamadi (veya stokta yok).';
+                status.className = 'status-msg error';
+                pushDiagnosticEvent('search-empty', `Arama sonucu bulunamadı: ${query}`, {
+                  query,
+                  successCount,
+                  failureCount,
+                });
+              }
             } else {
+              searchUiState = 'success';
               status.textContent = '';
               saveHistory(allItems, query);
+              pushDiagnosticEvent('search-success', `Arama tamamlandı: ${query}`, {
+                query,
+                resultCount: allItems.length,
+                successCount,
+                failureCount,
+              });
             }
             if (pendingSearchRenderTimer && allItems.length === 0) {
               clearTimeout(pendingSearchRenderTimer);
@@ -579,6 +810,7 @@ async function doSearch() {
 
 function renderResults(items, query) {
   if (!items || items.length === 0) return;
+  clearSearchErrorState();
   items = dedupeSearchItems(items, query);
 
   const isBarcode = isBarcodeQuery(query);
@@ -586,7 +818,7 @@ function renderResults(items, query) {
   const elapsed = now - searchStartTime;
   const barcodeHints = getBarcodeHints(items, query);
 
-  // 1.5 saniye dolmadan sonuÃƒÂ§ gÃƒÂ¶sterme (GÃƒÂ¶rsel stabilite iÃƒÂ§in)
+  // 1.5 saniye dolmadan sonuç gösterme (Görsel stabilite için)
   if (!isBarcode && selectedVariant === null && elapsed < MIN_GATHER_TIME) {
     return;
   }
@@ -636,7 +868,7 @@ function renderResults(items, query) {
     
     if (!g.imgUrl && hasValidImg) g.imgUrl = normalizedImgUrl;
     
-    // Ã„Â°sim temizleme: En kÃ„Â±sa olanÃ„Â± (en jenerik olanÃ„Â±) seÃƒÂ§
+    // İsim temizleme: En kısa olanı (en jenerik olanı) seç
     if (i.ad.length < g.originalName.length) {
       g.originalName = i.ad;
     }
@@ -710,6 +942,7 @@ function renderVariantSelectionLayer(groups, query, allItems) {
 
 function renderDetailResults(items, query) {
   if (!items || items.length === 0) return;
+  clearSearchErrorState();
   items = dedupeSearchItems(items, query).slice().sort(compareDepotItems);
   currentDetailItems = items.slice();
   currentDetailQuery = query;
@@ -753,7 +986,7 @@ function renderDetailResults(items, query) {
   document.getElementById('productCount').textContent = 'Toplam ' + items.length + ' Teklif Bulundu';
 
   const imgEl = document.getElementById('productImg');
-  const preferredDepotOrder = ['SelÃƒÂ§uk Ecza', 'Sentez B2B', 'Nevzat Ecza', 'Anadolu Ã„Â°triyat', 'Alliance Healthcare', 'Anadolu Pharma'];
+  const preferredDepotOrder = ['Selçuk Ecza', 'Sentez B2B', 'Nevzat Ecza', 'Anadolu İtriyat', 'Alliance Healthcare', 'Anadolu Pharma'];
   const imgCandidates = items
     .map((item) => ({ ...item, resolvedImgUrl: normalizeImageUrl(item.imgUrl, item.depotUrl) }))
     .filter((item) => item.resolvedImgUrl && isUsableImageUrl(item.resolvedImgUrl));
@@ -1099,6 +1332,23 @@ function removeOrderPlanItem(key, depot = '') {
   refreshOrderPlanViews();
 }
 
+function updateOrderPlanItemQuantity(key, depot = '', desiredQty = 1) {
+  const safeQty = Math.max(parseInt(desiredQty, 10) || 1, 1);
+  const next = getOrderPlan().map((item) => {
+    if (!(item.key === key && item.depot === depot)) return item;
+    const effectiveUnit = Number(item.effectiveUnit) || Number(item.unitPrice) || 0;
+    return normalizeOrderPlanItem({
+      ...item,
+      desiredQty: safeQty,
+      orderQty: safeQty,
+      receiveQty: safeQty,
+      totalCost: effectiveUnit > 0 ? effectiveUnit * safeQty : Number(item.totalCost) || 0,
+    });
+  }).filter(Boolean);
+  saveOrderPlan(next);
+  refreshOrderPlanViews();
+}
+
 function getPlannerOption(items, qty, { useMf = false } = {}) {
   const safeQty = Math.max(parseInt(qty, 10) || 1, 1);
   const options = useMf ? calcMfOptions(items, safeQty) : buildUnitOptions(items, safeQty);
@@ -1304,9 +1554,9 @@ function comparePlannerOptions(a, b) {
   return aDepot.localeCompare(bDepot, 'tr');
 }
 
-// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// ───────────────────────────────────────────────────
 // STOCK CALCULATOR
-// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// ───────────────────────────────────────────────────
 let _scItems = [];
 let _scActiveQty = null;
 let _scQuoteVersion = 0;
@@ -1795,7 +2045,7 @@ function toggleStockCalc() {
   });
 })();
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Depoya Git Ã¢â‚¬â€ open in depot panel Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Depoya Git — open in depot panel ────
 function buildChromeDepotTarget(depotId, rawQuery, fallbackUrl) {
   const query = String(rawQuery || '').trim();
   const cleanBarcode = parseQRCode(query);
@@ -1853,7 +2103,7 @@ function copyAndOpenDepot(url, depotId) {
 
   if (textToCopy) {
     navigator.clipboard.writeText(textToCopy).then(() => {
-      showToast('"' + textToCopy + '" kopyalandÃ„Â±');
+      showToast('"' + textToCopy + '" kopyalandı');
     }).catch(() => {});
   }
 
@@ -1875,13 +2125,15 @@ function showToast(msg) {
   toast._timer = setTimeout(() => toast.classList.remove('show'), 4000);
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Autocomplete Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Autocomplete ────
 function setupAutocomplete(inputId, suggestionsId, onSelect) {
   const input = document.getElementById(inputId);
   const dropdown = document.getElementById(suggestionsId);
   let debounceTimer = null;
   let abortController = null;
   let selectedIndex = -1;
+  let loadingTimer = null;
+  const suggestionCache = new Map();
 
   input.addEventListener('input', () => {
     const q = input.value.trim();
@@ -1903,7 +2155,7 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
       const selDrugName = document.getElementById('selectedDrugName');
       const selDrugCode = document.getElementById('selectedDrugCode');
       if (selDrugName && selDrugCode) {
-        selDrugName.textContent = 'Barkod TaramasÃ„Â±';
+        selDrugName.textContent = 'Barkod Taraması';
         selDrugCode.textContent = 'Barkod: ' + q;
         document.getElementById('selectedDrug').style.display = 'flex';
       }
@@ -1915,61 +2167,84 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
       return;
     }
 
-    debounceTimer = setTimeout(() => fetchSuggestions(q), 300);
+    debounceTimer = setTimeout(() => fetchSuggestions(q), 120);
   });
 
   async function fetchSuggestions(q) {
     if (abortController) abortController.abort();
     abortController = new AbortController();
+    clearTimeout(loadingTimer);
 
-    dropdown.innerHTML = '<div class="suggestion-loading">AranÃ„Â±yor...</div>';
-    dropdown.classList.add('open');
+    const cached = suggestionCache.get(q);
+    if (cached) {
+      renderSuggestions(q, cached);
+      return;
+    }
+
+    loadingTimer = setTimeout(() => {
+      dropdown.innerHTML = '<div class="suggestion-loading">Aranıyor...</div>';
+      dropdown.classList.add('open');
+    }, 120);
 
     try {
       const res = await authFetch(API_BASE + '/api/autocomplete?q=' + encodeURIComponent(q), {
         signal: abortController.signal,
       });
       const data = await res.json();
+      clearTimeout(loadingTimer);
 
       if (!data.suggestions || data.suggestions.length === 0) {
-        dropdown.innerHTML = '<div class="suggestion-loading">SonuÃƒÂ§ bulunamadÃ„Â±</div>';
+        dropdown.innerHTML = '<div class="suggestion-loading">Sonuç bulunamadı</div>';
+        dropdown.classList.add('open');
         return;
       }
 
-      dropdown.innerHTML = '';
-      const items = data.suggestions.slice(0, 10);
-      const regex = new RegExp('(' + escRegex(q) + ')', 'gi');
-
-      items.forEach((item, i) => {
-        const div = document.createElement('div');
-        div.className = 'suggestion-item';
-        const highlighted = esc(item.ad).replace(regex, '<mark>$1</mark>');
-        const barcode = item.barcode || extractBarcode(item.kodu);
-        div.innerHTML = `
-          <span class="suggestion-name">${highlighted}</span>
-          <span class="suggestion-meta">
-            ${barcode ? '<span class="suggestion-code">' + esc(barcode) + '</span>' : ''}
-            <span class="suggestion-price">TL ${esc(item.fiyat)}</span>
-          </span>
-        `;
-        div.addEventListener('click', () => {
-          input.value = item.ad;
-          dropdown.classList.remove('open');
-          onSelect(item);
-        });
-        dropdown.appendChild(div);
-      });
-
-      if (data.source) {
-        const srcDiv = document.createElement('div');
-        srcDiv.style.cssText = 'padding: 4px 16px; font-size: 11px; color: #aaa; text-align: right; border-top: 1px solid #f0f0f0;';
-        srcDiv.textContent = 'Kaynak: ' + data.source;
-        dropdown.appendChild(srcDiv);
+      suggestionCache.set(q, data);
+      if (suggestionCache.size > 20) {
+        const firstKey = suggestionCache.keys().next().value;
+        suggestionCache.delete(firstKey);
       }
+      renderSuggestions(q, data);
     } catch (err) {
+      clearTimeout(loadingTimer);
       if (err.name !== 'AbortError') {
-        dropdown.innerHTML = '<div class="suggestion-loading">Hata oluÃ…Å¸tu</div>';
+        dropdown.innerHTML = '<div class="suggestion-loading">Hata oluştu</div>';
+        dropdown.classList.add('open');
       }
+    }
+  }
+
+  function renderSuggestions(q, data) {
+    dropdown.innerHTML = '';
+    dropdown.classList.add('open');
+    const items = (data.suggestions || []).slice(0, 10);
+    const regex = new RegExp('(' + escRegex(q) + ')', 'gi');
+
+    items.forEach((item) => {
+      const div = document.createElement('div');
+      div.className = 'suggestion-item';
+      const highlighted = esc(item.ad).replace(regex, '<mark>$1</mark>');
+      const barcode = item.barcode || extractBarcode(item.kodu);
+      div.innerHTML = `
+        <span class="suggestion-name">${highlighted}</span>
+        <span class="suggestion-meta">
+          ${barcode ? '<span class="suggestion-code">' + esc(barcode) + '</span>' : ''}
+          <span class="suggestion-price">TL ${esc(item.fiyat)}</span>
+        </span>
+      `;
+      div.addEventListener('click', () => {
+        input.value = item.ad;
+        dropdown.classList.remove('open');
+        onSelect(item);
+      });
+      dropdown.appendChild(div);
+    });
+
+    if (data.source) {
+      const srcDiv = document.createElement('div');
+      srcDiv.style.cssText = 'padding: 4px 16px; font-size: 11px; color: #aaa; text-align: right; border-top: 1px solid #f0f0f0;';
+      srcDiv.textContent = 'Kaynak: ' + data.source;
+      dropdown.appendChild(srcDiv);
     }
   }
 
@@ -2032,7 +2307,7 @@ function onDrugSelected(item) {
 setupAutocomplete('homeSearchInput', 'homeSuggestions', onDrugSelected);
 setupAutocomplete('searchInput', 'searchSuggestions', onDrugSelected);
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Depot status Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Depot status ────
 const DEPOT_LIST = [
   { id: 'selcuk', name: 'Selçuk Ecza' },
   { id: 'nevzat', name: 'Nevzat Ecza' },
@@ -2081,19 +2356,29 @@ async function loadDepotStatus() {
       dot.title = d.name + (connected ? ' (Bağlı)' : ' (Bağlı değil)');
       navDepots.appendChild(dot);
     }
+    pushDiagnosticEvent('config', 'Depo durumları yenilendi', {
+      connectedCount: DEPOT_LIST.filter((d) => {
+        const info = cachedConfig.depots[d.id];
+        return info && (info.hasCredentials || info.hasCookies || info.hasToken);
+      }).length,
+    });
   } catch (e) {
     console.error('Depot status load failed:', e);
     cachedConfig = { depots: {} };
+    pushDiagnosticEvent('config-error', 'Depo durumları yüklenemedi', {
+      message: e?.message || String(e),
+    });
   }
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ App Init (auth guard) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── App Init (auth guard) ──────────────────────────────────────────────────
 
 async function initApp() {
   const authed = await requireAuthOrRedirect();
   if (!authed) return;
+  setupElectronDiagnosticsBridge();
 
-  // Profil adÃ„Â±nÃ„Â± kullanÃ„Â±cÃ„Â±dan al
+  // Profil adını kullanıcıdan al
   const currentUser = getUser();
   if (currentUser?.displayName) {
     const nameEl   = document.querySelector('.profile-name');
@@ -2109,12 +2394,12 @@ async function initApp() {
 
 initApp();
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Settings Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Settings ────
 const DEPOT_FORMS = {
   selcuk: {
     name: 'Selçuk Ecza Deposu',
     fields: [
-      { id: 'hesapKodu', label: 'Hesap Kodu', placeholder: 'ÃƒÂ¶r: 1201800051' },
+      { id: 'hesapKodu', label: 'Hesap Kodu', placeholder: 'ör: 1201800051' },
       { id: 'kullaniciAdi', label: 'Kullanıcı Adı', placeholder: 'ör: sel1510038608' },
       { id: 'sifre', label: 'Şifre', placeholder: 'Depot şifreniz', type: 'password' },
     ],
@@ -2167,73 +2452,91 @@ const DEPOT_FORMS = {
   },
 };
 
-function renderSettings() {
-  const container = document.getElementById('settingsContainer');
-  container.innerHTML = '';
+function getUpdateStatusPresentation(payload, version) {
+  const phase = payload?.phase || '';
+  const map = {
+    checking: ['active', 'Kontrol ediliyor...'],
+    available: ['active', `Yeni sürüm: v${payload?.version || '?'} - indiriliyor`],
+    downloading: ['active', `İndiriliyor... %${Math.round(payload?.percent || 0)}`],
+    downloaded: ['ok', 'Güncelleme hazır - uygulama kapanınca kurulacak'],
+    'up-to-date': ['ok', `Güncel (v${payload?.version || version || '-'})`],
+    error: ['error', 'Güncelleme kontrolü başarısız'],
+    'dev-mode': ['', 'Geliştirici modu - güncelleme devre dışı'],
+    'already-checking': ['active', 'Zaten kontrol ediliyor...'],
+    'already-downloaded': ['ok', 'Güncelleme zaten indirildi'],
+  };
+  return map[phase] || ['', payload?.phase || '-'];
+}
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Uygulama Bilgi KartÃ„Â± Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-  const appCard = document.createElement('div');
-  appCard.className = 'app-info-card';
-  appCard.innerHTML = `
-    <div class="app-info-header">
-      <span class="app-info-title">Uygulama</span>
-      <span class="app-version" id="appVersionLabel">Sürüm yükleniyor...</span>
+function buildGeneralSettingsMarkup() {
+  const user = getUser();
+  const connectedCount = DEPOT_LIST.filter((d) => {
+    const info = cachedConfig?.depots?.[d.id];
+    return info && (info.hasCredentials || info.hasCookies || info.hasToken);
+  }).length;
+
+  return `
+    <div class="settings-grid">
+      <section class="settings-card settings-panel">
+        <div class="settings-panel-header">
+          <div>
+            <h3>Genel</h3>
+            <p>Uygulama durumu, güncelleme ve temel bakım işlemleri.</p>
+          </div>
+        </div>
+        <div class="app-info-card">
+          <div class="app-info-header">
+            <span class="app-info-title">Uygulama</span>
+            <span class="app-version" id="appVersionLabel">Sürüm yükleniyor...</span>
+          </div>
+          <div class="app-update-row">
+            <span class="app-update-status" id="appUpdateStatus">-</span>
+            <button class="btn-check-update" id="btnCheckUpdate" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Güncelleme Kontrol Et
+            </button>
+          </div>
+        </div>
+        <div class="settings-summary-grid">
+          <div class="settings-summary-item">
+            <span class="settings-summary-label">Profil</span>
+            <strong>${esc(user?.displayName || 'Eczane')}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span class="settings-summary-label">Bağlı Depo</span>
+            <strong>${connectedCount}/${DEPOT_LIST.length}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span class="settings-summary-label">Kapanış Davranışı</span>
+            <strong>Tam çıkış</strong>
+          </div>
+        </div>
+      </section>
+      <section class="settings-card settings-panel">
+        <div class="settings-panel-header">
+          <div>
+            <h3>Bakım Yardımcıları</h3>
+            <p>Geliştirme sürecinde sık kullanılan güvenli araçlar.</p>
+          </div>
+        </div>
+        <div class="settings-tools-list">
+          <button class="btn btn-outline" id="refreshDepotStatusBtn" type="button">Depo Durumlarını Yenile</button>
+          <button class="btn btn-outline" id="clearDiagnosticsBtn" type="button">Tanı Loglarını Temizle</button>
+          <button class="btn btn-danger" id="quitAppFromSettingsBtn" type="button">Uygulamayı Kapat</button>
+        </div>
+      </section>
     </div>
-    <div class="app-update-row">
-      <span class="app-update-status" id="appUpdateStatus">-</span>
-      <button class="btn-check-update" id="btnCheckUpdate" onclick="triggerUpdateCheck()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        Güncelleme Kontrol Et
-      </button>
-    </div>`;
-  container.appendChild(appCard);
+  `;
+}
 
-  // SÃƒÂ¼rÃƒÂ¼mÃƒÂ¼ async yÃƒÂ¼kle
-  (async () => {
-    const versionLabel = document.getElementById('appVersionLabel');
-    const updateStatus = document.getElementById('appUpdateStatus');
-    const checkBtn     = document.getElementById('btnCheckUpdate');
-    if (window.electronAPI?.getAppVersion) {
-      const v = await window.electronAPI.getAppVersion();
-      if (versionLabel) versionLabel.innerHTML = `Sürüm: <strong>v${v}</strong>`;
-      // GÃƒÂ¼ncelleme event'lerini dinle
-      window.electronAPI.onUpdateStatus((payload) => {
-        if (!updateStatus || !checkBtn) return;
-        checkBtn.disabled = false;
-        updateStatus.className = 'app-update-status';
-        const msgs = {
-          checking:          ['active',  'Kontrol ediliyor...'],
-          available:         ['active',  `Yeni sürüm: v${payload.version || '?'} - indiriliyor`],
-          downloading:       ['active',  `İndiriliyor... %${Math.round(payload.percent || 0)}`],
-          downloaded:        ['ok',      'Güncelleme hazır - uygulama kapanınca kurulacak'],
-          'up-to-date':      ['ok',      `Güncel (v${payload.version || v})`],
-          error:             ['error',   'Güncelleme kontrolü başarısız'],
-          'dev-mode':        ['',        'Geliştirici modu - güncelleme devre dışı'],
-          'already-checking':['active',  'Zaten kontrol ediliyor...'],
-          'already-downloaded':['ok',   'Güncelleme zaten indirildi'],
-        };
-        const [cls, text] = msgs[payload.phase] || ['', payload.phase];
-        if (cls) updateStatus.classList.add(cls);
-        updateStatus.textContent = text;
-        if (payload.phase === 'checking' || payload.phase === 'downloading') {
-          checkBtn.disabled = true;
-        }
-      });
-    } else {
-      if (versionLabel) versionLabel.textContent = 'Web modu';
-      if (checkBtn) checkBtn.disabled = true;
-      if (updateStatus) updateStatus.textContent = 'Güncelleme yalnızca Electron uygulamasında çalışır';
-    }
-  })();
-
+function buildDepotSettingsMarkup() {
+  let html = '<div class="settings-stack">';
   for (const [depotId, form] of Object.entries(DEPOT_FORMS)) {
     const depotInfo = cachedConfig?.depots?.[depotId];
     const isConfigured = depotInfo && (depotInfo.hasCredentials || depotInfo.hasCookies || depotInfo.hasToken);
-    const card = document.createElement('div');
-    card.className = 'settings-card';
 
     let fieldsHtml = '<div class="form-row">';
-    form.fields.forEach(f => {
+    form.fields.forEach((f) => {
       const savedVal = depotInfo ? (safeCreds[depotId]?.[f.id] || '') : '';
       fieldsHtml += `
         <div class="form-group">
@@ -2249,7 +2552,7 @@ function renderSettings() {
       extraHtml += `
         <hr class="divider" />
         <div class="form-group">
-          <label>Manuel Cookie (opsiyonel - DevTools cookie'si yapıştır)</label>
+          <label>Manuel Cookie (opsiyonel)</label>
           <textarea id="${depotId}-cookies" placeholder="Cookie string..."></textarea>
           <div class="hint">Chrome DevTools -> Application -> Cookies</div>
         </div>
@@ -2266,26 +2569,185 @@ function renderSettings() {
       `;
     }
 
-    card.innerHTML = `
-      <h3>
-        ${esc(form.name)}
-        <span class="badge ${isConfigured ? 'badge-ok' : 'badge-off'}">${isConfigured ? 'bağlı' : 'bağlı değil'}</span>
-      </h3>
-      ${fieldsHtml}
-      <div class="btn-row">
-        <button class="btn btn-primary" data-action="test-login" data-depot="${depotId}">Giriş Yap & Kaydet</button>
-        <button class="btn btn-outline" data-action="save" data-depot="${depotId}">Sadece Kaydet</button>
-        ${isConfigured ? '<button class="btn btn-danger" data-action="delete" data-depot="' + depotId + '">Sil</button>' : ''}
-        <span id="${depotId}-status" class="action-status"></span>
-      </div>
-      ${extraHtml}
+    html += `
+      <section class="settings-card settings-panel">
+        <h3>
+          ${esc(form.name)}
+          <span class="badge ${isConfigured ? 'badge-ok' : 'badge-off'}">${isConfigured ? 'bağlı' : 'bağlı değil'}</span>
+        </h3>
+        ${fieldsHtml}
+        <div class="btn-row">
+          <button class="btn btn-primary" data-action="test-login" data-depot="${depotId}" type="button">Giriş Yap & Kaydet</button>
+          <button class="btn btn-outline" data-action="save" data-depot="${depotId}" type="button">Sadece Kaydet</button>
+          ${isConfigured ? '<button class="btn btn-danger" data-action="delete" data-depot="' + depotId + '" type="button">Sil</button>' : ''}
+          <span id="${depotId}-status" class="action-status"></span>
+        </div>
+        ${extraHtml}
+      </section>
     `;
+  }
+  html += '</div>';
+  return html;
+}
 
-    card.querySelector('[data-action="test-login"]')?.addEventListener('click', () => testDepotLogin(depotId));
-    card.querySelector('[data-action="save"]')?.addEventListener('click', () => saveDepot(depotId));
-    card.querySelector('[data-action="delete"]')?.addEventListener('click', () => deleteDepot(depotId));
+function buildDeveloperSettingsMarkup() {
+  const lastSearch = lastSearchAttempt.query
+    ? `${esc(lastSearchAttempt.query)}`
+    : 'Henüz arama yapılmadı';
+  const diagnostics = getDiagnosticsSnapshot();
+  const diagnosticsHtml = diagnostics.length
+    ? diagnostics.map((entry) => `
+        <div class="diagnostic-item">
+          <div class="diagnostic-item-top">
+            <span class="diagnostic-type">${esc(entry.type)}</span>
+            <span class="diagnostic-time">${new Date(entry.timestamp).toLocaleTimeString('tr-TR')}</span>
+          </div>
+          <div class="diagnostic-message">${esc(entry.message)}</div>
+        </div>
+      `).join('')
+    : '<div class="diagnostic-empty">Henüz tanı kaydı oluşmadı.</div>';
 
-    container.appendChild(card);
+  return `
+    <div class="settings-grid">
+      <section class="settings-card settings-panel">
+        <div class="settings-panel-header">
+          <div>
+            <h3>Oturum ve Uygulama Sağlığı</h3>
+            <p>Geliştirme sırasında hızlı kontrol için anlık durum özeti.</p>
+          </div>
+        </div>
+        <div class="settings-summary-grid">
+          <div class="settings-summary-item">
+            <span class="settings-summary-label">Arama Durumu</span>
+            <strong>${esc(searchUiState)}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span class="settings-summary-label">Son Sorgu</span>
+            <strong>${lastSearch}</strong>
+          </div>
+          <div class="settings-summary-item">
+            <span class="settings-summary-label">Son Güncelleme Olayı</span>
+            <strong>${esc(latestUpdatePayload?.phase || '-')}</strong>
+          </div>
+        </div>
+      </section>
+      <section class="settings-card settings-panel">
+        <div class="settings-panel-header">
+          <div>
+            <h3>Tanı Kayıtları</h3>
+            <p>Arama, auth, updater ve renderer hataları için son olay listesi.</p>
+          </div>
+        </div>
+        <div class="diagnostics-list">${diagnosticsHtml}</div>
+      </section>
+    </div>
+  `;
+}
+
+function bindSettingsTabActions() {
+  document.querySelectorAll('[data-settings-tab]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeSettingsTab = btn.dataset.settingsTab;
+      renderSettings();
+    });
+  });
+
+  document.getElementById('btnCheckUpdate')?.addEventListener('click', triggerUpdateCheck);
+  document.getElementById('refreshDepotStatusBtn')?.addEventListener('click', async () => {
+    await loadDepotStatus();
+    renderSettings();
+  });
+  document.getElementById('clearDiagnosticsBtn')?.addEventListener('click', () => {
+    clearDiagnosticsBuffer();
+    renderSettings();
+  });
+  const quitBtn = document.getElementById('quitAppFromSettingsBtn');
+  if (quitBtn) {
+    quitBtn.disabled = !window.electronAPI?.quitApp;
+    quitBtn.addEventListener('click', () => {
+      if (window.electronAPI?.quitApp) window.electronAPI.quitApp();
+    });
+  }
+
+  document.querySelectorAll('[data-action="test-login"]').forEach((btn) => {
+    btn.addEventListener('click', () => testDepotLogin(btn.dataset.depot));
+  });
+  document.querySelectorAll('[data-action="save"]').forEach((btn) => {
+    btn.addEventListener('click', () => saveDepot(btn.dataset.depot));
+  });
+  document.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+    btn.addEventListener('click', () => deleteDepot(btn.dataset.depot));
+  });
+}
+
+function refreshSettingsGeneralStatus(version) {
+  const versionLabel = document.getElementById('appVersionLabel');
+  const updateStatus = document.getElementById('appUpdateStatus');
+  const checkBtn = document.getElementById('btnCheckUpdate');
+  if (versionLabel) versionLabel.innerHTML = `Sürüm: <strong>${esc(version)}</strong>`;
+
+  if (!window.electronAPI?.checkForUpdates) {
+    if (checkBtn) checkBtn.disabled = true;
+    if (updateStatus) updateStatus.textContent = 'Güncelleme yalnızca Electron uygulamasında çalışır';
+    return;
+  }
+
+  if (updateStatus) {
+    const [cls, text] = getUpdateStatusPresentation(latestUpdatePayload, version);
+    updateStatus.className = 'app-update-status';
+    if (cls) updateStatus.classList.add(cls);
+    updateStatus.textContent = text;
+  }
+
+  if (checkBtn) {
+    const phase = latestUpdatePayload?.phase;
+    checkBtn.disabled = phase === 'checking' || phase === 'downloading';
+  }
+}
+
+function renderSettings() {
+  const container = document.getElementById('settingsContainer');
+  if (!container) return;
+
+  const tabs = [
+    { id: 'general', label: 'Genel' },
+    { id: 'depots', label: 'Depolar' },
+    { id: 'developer', label: 'Geliştirici' },
+  ];
+
+  let contentHtml = '';
+  if (activeSettingsTab === 'depots') contentHtml = buildDepotSettingsMarkup();
+  else if (activeSettingsTab === 'developer') contentHtml = buildDeveloperSettingsMarkup();
+  else contentHtml = buildGeneralSettingsMarkup();
+
+  container.innerHTML = `
+    <div class="settings-tabs" role="tablist" aria-label="Ayarlar sekmeleri">
+      ${tabs.map((tab) => `
+        <button
+          class="settings-tab ${activeSettingsTab === tab.id ? 'active' : ''}"
+          data-settings-tab="${tab.id}"
+          type="button"
+          role="tab"
+          aria-selected="${activeSettingsTab === tab.id ? 'true' : 'false'}">${tab.label}</button>
+      `).join('')}
+    </div>
+    <div class="settings-tab-panel">${contentHtml}</div>
+  `;
+
+  bindSettingsTabActions();
+
+  if (activeSettingsTab === 'general') {
+    if (window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then((version) => {
+        if (currentPage === 'settings' && activeSettingsTab === 'general') {
+          refreshSettingsGeneralStatus(`v${version}`);
+        }
+      }).catch(() => {
+        refreshSettingsGeneralStatus('Sürüm alınamadı');
+      });
+    } else {
+      refreshSettingsGeneralStatus('Web modu');
+    }
   }
 }
 
@@ -2295,8 +2757,9 @@ async function triggerUpdateCheck() {
   if (!window.electronAPI?.checkForUpdates) return;
   if (btn) btn.disabled = true;
   if (status) { status.className = 'app-update-status active'; status.textContent = 'Kontrol ediliyor...'; }
+  pushDiagnosticEvent('updater', 'Manuel güncelleme kontrolü başlatıldı');
   const result = await window.electronAPI.checkForUpdates();
-  // SonuÃƒÂ§ event olarak da gelir (onUpdateStatus), ama anlÃ„Â±k geri dÃƒÂ¶nÃƒÂ¼Ã…Å¸ iÃƒÂ§in de gÃƒÂ¶ster
+  // Sonuç event olarak da gelir (onUpdateStatus), ama anlık geri dönüş için de göster
   if (result?.status === 'dev-mode') {
     if (btn) btn.disabled = true;
     if (status) { status.className = 'app-update-status'; status.textContent = 'Geliştirici modu - güncelleme devre dışı'; }
@@ -2330,12 +2793,12 @@ async function testDepotLogin(depotId) {
       renderSettings();
       const newStatusEl = document.getElementById(depotId + '-status');
       if (newStatusEl) {
-        newStatusEl.textContent = 'GiriÃ…Å¸ baÃ…Å¸arÃ„Â±lÃ„Â±!';
+        newStatusEl.textContent = 'Giriş başarılı!';
         newStatusEl.className = 'action-status success';
         setTimeout(() => { newStatusEl.textContent = ''; newStatusEl.className = 'action-status'; }, 3000);
       }
     } else {
-      statusEl.textContent = data.error || 'GiriÃ…Å¸ baÃ…Å¸arÃ„Â±sÃ„Â±z';
+      statusEl.textContent = data.error || 'Giriş başarısız';
       statusEl.className = 'action-status fail';
     }
   } catch (err) {
@@ -2394,7 +2857,7 @@ async function deleteDepot(depotId) {
   } catch (e) {}
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Eczaci workflow helpers Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── Eczaci workflow helpers ────
 async function addCurrentToOrderPlan() {
   try {
     if (!currentDetailItems.length) {
@@ -2476,126 +2939,498 @@ function openOrderPlanDetail() {
   showPage('order-plan');
 }
 
-function renderOrderPlanDetail() {
-  const container = document.getElementById('orderPlanDetailContainer');
-  if (!container) return;
+function getPlanDrawerEntry() {
+  return getOrderPlan().find((item) => item.key === planEditorDrawerState.key && item.depot === planEditorDrawerState.depot) || null;
+}
 
-  const plan = getOrderPlan();
-  if (!plan.length) {
-    container.innerHTML = `
-      <section class="ops-card plan-detail-shell">
-        <div class="ops-empty">
-          <strong>Aktif siparis plani bos</strong>
-          <span>Arama sonucundan urun eklediginizde bu ekranda depo ve kalem detaylarini goreceksiniz.</span>
+function getSelectedPlanDrawerOption() {
+  return planEditorDrawerState.options.find((option) => getOfferSelectionKey(option.sourceItem) === planEditorDrawerState.selectedKey)
+    || planEditorDrawerState.options[0]
+    || null;
+}
+
+function applyPlanDrawerOptions(options, { preferExistingDepot = false } = {}) {
+  planEditorDrawerState.options = options || [];
+  if (!planEditorDrawerState.options.length) {
+    planEditorDrawerState.selectedKey = '';
+    return;
+  }
+
+  if (planEditorDrawerState.userSelected) {
+    const stillValid = planEditorDrawerState.options.some((option) => getOfferSelectionKey(option.sourceItem) === planEditorDrawerState.selectedKey);
+    if (stillValid) return;
+    planEditorDrawerState.userSelected = false;
+  }
+
+  if (preferExistingDepot) {
+    const existing = planEditorDrawerState.options.find((option) => option.depot === planEditorDrawerState.depot);
+    if (existing) {
+      planEditorDrawerState.selectedKey = getOfferSelectionKey(existing.sourceItem);
+      return;
+    }
+  }
+
+  planEditorDrawerState.selectedKey = getOfferSelectionKey(planEditorDrawerState.options[0].sourceItem);
+}
+
+async function refreshPlanEditorQuotes() {
+  if (!planEditorDrawerState.items.length) return;
+  const qty = Math.max(parseInt(planEditorDrawerState.qty, 10) || 1, 1);
+  const requestVersion = ++planEditorDrawerState.quoteVersion;
+  const fallbackOptions = getFallbackPlannerOptions(planEditorDrawerState.items, qty);
+  applyPlanDrawerOptions(fallbackOptions, { preferExistingDepot: !planEditorDrawerState.userSelected });
+  renderPlanEditorDrawer();
+
+  try {
+    const quotedOptions = await resolvePlannerOptions(planEditorDrawerState.items, qty);
+    if (requestVersion !== planEditorDrawerState.quoteVersion || !quotedOptions.length) return;
+    applyPlanDrawerOptions(quotedOptions, { preferExistingDepot: !planEditorDrawerState.userSelected });
+    renderPlanEditorDrawer();
+  } catch (error) {
+    console.error('refreshPlanEditorQuotes failed:', error);
+  }
+}
+
+function closePlanEditorDrawer() {
+  planEditorDrawerState.open = false;
+  planEditorDrawerState.loading = false;
+  planEditorDrawerState.error = '';
+  planEditorDrawerState.quoteVersion += 1;
+  const overlay = document.getElementById('planEditorOverlay');
+  const panel = document.getElementById('planEditorPanel');
+  if (overlay) overlay.classList.remove('open');
+  if (panel) {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function renderPlanEditorDrawer() {
+  const overlay = document.getElementById('planEditorOverlay');
+  const panel = document.getElementById('planEditorPanel');
+  const body = document.getElementById('planEditorBody');
+  const title = document.getElementById('planEditorTitle');
+  const subtitle = document.getElementById('planEditorSubtitle');
+  if (!overlay || !panel || !body || !title || !subtitle) return;
+
+  if (!planEditorDrawerState.open) {
+    overlay.classList.remove('open');
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+    return;
+  }
+
+  overlay.classList.add('open');
+  panel.classList.add('open');
+  panel.setAttribute('aria-hidden', 'false');
+  title.textContent = planEditorDrawerState.name || 'Plan Kalemi';
+  subtitle.textContent = planEditorDrawerState.barcode
+    ? `Barkod: ${planEditorDrawerState.barcode}`
+    : 'Barkod bilgisi bulunamadi';
+
+  if (planEditorDrawerState.loading) {
+    body.innerHTML = `
+      <div class="plan-editor-status">
+        <div class="plan-editor-loading">
+          <div class="spinner"></div>
+          <span>Depolar, kampanyalar ve MF secenekleri yukleniyor...</span>
         </div>
-      </section>
+      </div>
     `;
     return;
   }
 
-  const totalCost = plan.reduce((sum, item) => sum + (item.totalCost || 0), 0);
-  const depots = Array.from(new Set(plan.map(item => item.depot).filter(Boolean)));
+  if (planEditorDrawerState.error) {
+    body.innerHTML = `
+      <div class="plan-editor-error">
+        <strong>Plan duzenleyici yuklenemedi</strong>
+        <p>${esc(planEditorDrawerState.error)}</p>
+      </div>
+    `;
+    return;
+  }
 
-  container.innerHTML = `
-    <section class="ops-card plan-detail-shell">
-      <div class="plan-detail-summary">
-        <div class="plan-detail-stat">
-          <span>Kalem</span>
-          <strong>${plan.length}</strong>
+  const selectedOption = getSelectedPlanDrawerOption();
+  if (!selectedOption) {
+    body.innerHTML = `
+      <div class="plan-editor-error">
+        <strong>Teklif bulunamadi</strong>
+        <p>Bu kalem icin aktif depolardan teklif toplanamadi.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const detailText = getBulkOfferDetailText(selectedOption, planEditorDrawerState.qty);
+  const unitPrice = Number(selectedOption.effectiveUnit || 0);
+  const totalPrice = Number(selectedOption.totalCost || 0);
+  const planningLabel = selectedOption.mfStr ? `MF ${selectedOption.mfStr}` : 'Normal alim';
+
+  body.innerHTML = `
+    <section class="plan-editor-summary">
+      <div class="plan-editor-summary-top">
+        <div class="plan-editor-tags">
+          <span>${esc(selectedOption.depot || '')}</span>
+          <span>${esc(planEditorDrawerState.qty)} adet</span>
+          <span>${esc(planningLabel)}</span>
         </div>
-        <div class="plan-detail-stat">
-          <span>Toplam Depo</span>
-          <strong>${depots.length}</strong>
+        <div class="plan-editor-summary-price">
+          <span>Guncel toplam</span>
+          <strong>${formatCurrency(totalPrice)}</strong>
         </div>
-        <div class="plan-detail-stat plan-detail-stat-accent">
-          <span>Plan Toplami</span>
-          <strong>TL ${totalCost.toFixed(2).replace('.', ',')}</strong>
+      </div>
+      <div class="plan-editor-grid">
+        <div class="plan-editor-cell">
+          <span>Birim Maliyet</span>
+          <strong>${formatCurrency(unitPrice)}</strong>
         </div>
-        <button class="btn btn-outline plan-export-btn" type="button" id="exportPlanCsvBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          CSV İndir
+        <div class="plan-editor-cell">
+          <span>Toplam Odeme</span>
+          <strong>${formatCurrency(totalPrice)}</strong>
+        </div>
+        <div class="plan-editor-cell">
+          <span>Secilen Depo</span>
+          <strong>${esc(selectedOption.depot || '')}</strong>
+        </div>
+        <div class="plan-editor-cell">
+          <span>Plan Ozeti</span>
+          <strong>${esc(detailText)}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="plan-editor-controls">
+      <div class="plan-editor-section-head">
+        <div>
+          <strong>Miktar ve MF Hesabi</strong>
+          <p>Depodan alinacak net maliyeti bu alanda aninda gorun.</p>
+        </div>
+        <span>${esc(detailText)}</span>
+      </div>
+      <div class="plan-editor-qty-row">
+        <button class="action-qty-step" type="button" data-plan-drawer-minus>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <input class="action-qty-input" type="number" min="1" value="${Math.max(parseInt(planEditorDrawerState.qty, 10) || 1, 1)}" data-plan-drawer-qty />
+        <button class="action-qty-step" type="button" data-plan-drawer-plus>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
-      <div class="plan-detail-list">
-        ${plan.map(item => `
-          <article class="plan-detail-item plan-detail-card-clickable" tabindex="0" role="button" data-plan-detail-card="${esc(item.key)}" data-plan-detail-card-depot="${esc(item.depot)}">
-            <div class="plan-detail-head">
-              <div>
-                <h3>${esc(item.name)}</h3>
-                <div class="plan-detail-tags">
-                  <span>${esc(item.depot)}</span>
-                  <span>${esc(item.desiredQty)} adet</span>
-                  <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
-                </div>
-              </div>
-              <div class="plan-detail-price">TL ${(item.totalCost || 0).toFixed(2).replace('.', ',')}</div>
-            </div>
-            <div class="plan-detail-grid">
-              <div class="plan-detail-cell">
-                <span>Birim Maliyet</span>
-                <strong>${item.effectiveUnit > 0 ? 'TL ' + item.effectiveUnit.toFixed(2).replace('.', ',') : 'Bilinmiyor'}</strong>
-              </div>
-              <div class="plan-detail-cell">
-                <span>Barkod</span>
-                <strong>${item.barcode ? esc(item.barcode) : 'Yok'}</strong>
-              </div>
-              <div class="plan-detail-cell">
-                <span>Secilen Depo</span>
-                <strong>${esc(item.depot)}</strong>
-              </div>
-            </div>
-            <div class="plan-detail-actions">
-              <button class="btn btn-outline" type="button" data-plan-detail-open="${esc(item.key)}" data-plan-detail-depot="${esc(item.depot)}">Urunu Ac</button>
-              ${item.depotUrl ? `<button class="btn btn-primary" type="button" data-plan-detail-depot-open="${esc(item.key)}" data-plan-detail-depot-name="${esc(item.depot)}">Depoya Git</button>` : ''}
-              <button class="plan-item-remove" type="button" data-plan-detail-remove="${esc(item.key)}" data-plan-detail-remove-depot="${esc(item.depot)}">Sil</button>
-            </div>
-          </article>
-        `).join('')}
+    </section>
+
+    <section class="plan-editor-offers">
+      <div class="plan-editor-section-head">
+        <div>
+          <strong>Depo Secimi</strong>
+          <p>Farkli depolari karsilastirip aktif plan icin en uygun secenegi belirleyin.</p>
+        </div>
       </div>
+      ${planEditorDrawerState.options.map((option, idx) => {
+        const isSelected = getOfferSelectionKey(option.sourceItem) === planEditorDrawerState.selectedKey;
+        const optionDetail = getBulkOfferDetailText(option, planEditorDrawerState.qty);
+        return `
+          <article class="plan-editor-offer ${isSelected ? 'is-selected' : ''}" data-plan-drawer-offer="${idx}" tabindex="0" role="button">
+            <div class="plan-editor-offer-top">
+              <div class="plan-editor-offer-name">
+                <span>${esc(option.depot || '')}</span>
+                ${idx === 0 ? '<span class="plan-editor-offer-badge">En Uygun</span>' : ''}
+                ${isSelected ? '<span class="plan-editor-offer-badge selected">Secili</span>' : ''}
+              </div>
+              <div class="plan-editor-offer-price">
+                <strong>${formatCurrency(option.totalCost || 0)}</strong>
+                <span>Birim ${formatCurrency(option.effectiveUnit || 0)}</span>
+              </div>
+            </div>
+            <div class="plan-editor-offer-meta">${esc(optionDetail)}</div>
+          </article>
+        `;
+      }).join('')}
+    </section>
+
+    <section class="plan-editor-actions plan-editor-actions-sticky">
+      <button class="btn btn-primary" type="button" data-plan-drawer-save>Plani Guncelle</button>
+      <button class="btn btn-outline" type="button" data-plan-drawer-open>Urunu Ac</button>
+      ${selectedOption.depotUrl ? '<button class="btn btn-outline" type="button" data-plan-drawer-depot>Depoya Git</button>' : ''}
+      <button class="plan-item-remove" type="button" data-plan-drawer-remove>Sil</button>
     </section>
   `;
 
-  container.querySelectorAll('[data-plan-detail-card]').forEach((card) => {
-    const openItem = () => {
-      const item = plan.find((entry) => entry.key === card.dataset.planDetailCard && entry.depot === card.dataset.planDetailCardDepot);
-      if (item) openSavedProduct(item);
+  body.querySelector('[data-plan-drawer-minus]')?.addEventListener('click', () => {
+    planEditorDrawerState.qty = Math.max((parseInt(planEditorDrawerState.qty, 10) || 1) - 1, 1);
+    refreshPlanEditorQuotes();
+  });
+  body.querySelector('[data-plan-drawer-plus]')?.addEventListener('click', () => {
+    planEditorDrawerState.qty = Math.max(parseInt(planEditorDrawerState.qty, 10) || 1, 1) + 1;
+    refreshPlanEditorQuotes();
+  });
+  body.querySelector('[data-plan-drawer-qty]')?.addEventListener('change', (event) => {
+    planEditorDrawerState.qty = Math.max(parseInt(event.target.value, 10) || 1, 1);
+    refreshPlanEditorQuotes();
+  });
+
+  body.querySelectorAll('[data-plan-drawer-offer]').forEach((row) => {
+    const select = () => {
+      const option = planEditorDrawerState.options[parseInt(row.dataset.planDrawerOffer, 10)];
+      if (!option) return;
+      planEditorDrawerState.selectedKey = getOfferSelectionKey(option.sourceItem);
+      planEditorDrawerState.userSelected = true;
+      renderPlanEditorDrawer();
     };
-    card.addEventListener('click', (event) => {
-      if (event.target.closest('button')) return;
-      openItem();
-    });
-    card.addEventListener('keydown', (event) => {
+    row.addEventListener('click', select);
+    row.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        openItem();
+        select();
       }
     });
   });
 
-  container.querySelectorAll('[data-plan-detail-open]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const item = plan.find((entry) => entry.key === btn.dataset.planDetailOpen && entry.depot === btn.dataset.planDetailDepot);
-      if (item) openSavedProduct(item);
+  body.querySelector('[data-plan-drawer-open]')?.addEventListener('click', () => {
+    openSavedProduct({
+      barcode: planEditorDrawerState.barcode,
+      query: planEditorDrawerState.barcode || planEditorDrawerState.name,
+      name: planEditorDrawerState.name,
     });
   });
 
-  container.querySelectorAll('[data-plan-detail-depot-open]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const item = plan.find((entry) => entry.key === btn.dataset.planDetailDepotOpen && entry.depot === btn.dataset.planDetailDepotName);
-      if (item?.depotUrl) copyAndOpenDepot(item.depotUrl, item.depotId || '');
+  body.querySelector('[data-plan-drawer-depot]')?.addEventListener('click', () => {
+    if (selectedOption?.depotUrl) copyAndOpenDepot(selectedOption.depotUrl, selectedOption.depotId || '');
+  });
+
+  body.querySelector('[data-plan-drawer-remove]')?.addEventListener('click', () => {
+    removeOrderPlanItem(planEditorDrawerState.key, planEditorDrawerState.depot);
+    closePlanEditorDrawer();
+  });
+
+  body.querySelector('[data-plan-drawer-save]')?.addEventListener('click', () => {
+    const currentEntry = getPlanDrawerEntry();
+    const selected = getSelectedPlanDrawerOption();
+    if (!currentEntry || !selected) return;
+    addPlannerOptionToOrderPlan(selected, planEditorDrawerState.qty, {
+      toastLabel: `${planEditorDrawerState.name || 'Plan kalemi'} guncellendi`,
     });
+    if (currentEntry.depot !== selected.depot) {
+      removeOrderPlanItem(currentEntry.key, currentEntry.depot);
+    }
+    closePlanEditorDrawer();
   });
-
-  container.querySelectorAll('[data-plan-detail-remove]').forEach((btn) => {
-    btn.addEventListener('click', () => removeOrderPlanItem(btn.dataset.planDetailRemove, btn.dataset.planDetailRemoveDepot));
-  });
-
-  document.getElementById('exportPlanCsvBtn')?.addEventListener('click', () => exportOrderPlanCsv(plan));
 }
 
-// ── Bulk Search ──────────────────────────────────────────────────────────────
+async function openPlanEditorDrawer(key, depot = '') {
+  const entry = getOrderPlan().find((item) => item.key === key && item.depot === depot);
+  if (!entry) {
+    showToast('Plan kalemi bulunamadi');
+    return;
+  }
+
+  planEditorDrawerState.open = true;
+  planEditorDrawerState.loading = true;
+  planEditorDrawerState.error = '';
+  planEditorDrawerState.key = entry.key;
+  planEditorDrawerState.depot = entry.depot || '';
+  planEditorDrawerState.qty = Math.max(parseInt(entry.desiredQty, 10) || 1, 1);
+  planEditorDrawerState.name = entry.name || entry.query || entry.barcode || 'Plan Kalemi';
+  planEditorDrawerState.barcode = entry.barcode || '';
+  planEditorDrawerState.items = [];
+  planEditorDrawerState.options = [];
+  planEditorDrawerState.selectedKey = '';
+  planEditorDrawerState.userSelected = false;
+  planEditorDrawerState.quoteVersion += 1;
+  renderPlanEditorDrawer();
+
+  try {
+    const items = await searchOneBulkQuery(entry.barcode || entry.query || entry.name || '');
+    if (!planEditorDrawerState.open || planEditorDrawerState.key !== entry.key || planEditorDrawerState.depot !== entry.depot) return;
+    planEditorDrawerState.items = items;
+    planEditorDrawerState.loading = false;
+    if (!items.length) {
+      planEditorDrawerState.error = 'Bu plan kalemi icin aktif depolardan teklif toplanamadi.';
+      renderPlanEditorDrawer();
+      return;
+    }
+    await refreshPlanEditorQuotes();
+  } catch (error) {
+    console.error('openPlanEditorDrawer failed:', error);
+    planEditorDrawerState.loading = false;
+    planEditorDrawerState.error = 'Plan duzenleyici yuklenirken bir hata olustu.';
+    renderPlanEditorDrawer();
+  }
+}
+
+function renderOrderPlanDetail() {
+  const container = document.getElementById('orderPlanDetailContainer');
+  if (!container) return;
+
+  try {
+    const plan = getOrderPlan().map(normalizeOrderPlanItem).filter(Boolean);
+    if (!plan.length) {
+      container.innerHTML = `
+        <section class="ops-card plan-detail-shell">
+          <div class="ops-empty">
+            <strong>Aktif siparis plani bos</strong>
+            <span>Arama sonucundan urun eklediginizde bu ekranda depo ve kalem detaylarini goreceksiniz.</span>
+          </div>
+        </section>
+      `;
+      return;
+    }
+
+    const totalCost = plan.reduce((sum, item) => sum + (Number(item.totalCost) || 0), 0);
+    const depots = Array.from(new Set(plan.map(item => item.depot).filter(Boolean)));
+
+    container.innerHTML = `
+      <section class="ops-card plan-detail-shell">
+        <div class="plan-detail-summary">
+          <div class="plan-detail-stat">
+            <span>Kalem</span>
+            <strong>${plan.length}</strong>
+          </div>
+          <div class="plan-detail-stat">
+            <span>Toplam Depo</span>
+            <strong>${depots.length}</strong>
+          </div>
+          <div class="plan-detail-stat plan-detail-stat-accent">
+            <span>Plan Toplami</span>
+            <strong>TL ${totalCost.toFixed(2).replace('.', ',')}</strong>
+          </div>
+          <button class="btn btn-outline plan-export-btn" type="button" id="exportPlanCsvBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            CSV İndir
+          </button>
+        </div>
+        <div class="plan-detail-list">
+          ${plan.map(item => {
+            const isDrawerOpen = planEditorDrawerState.open
+              && planEditorDrawerState.key === item.key
+              && planEditorDrawerState.depot === item.depot;
+            return `
+            <article class="plan-detail-item plan-detail-item-editable ${isDrawerOpen ? 'is-open' : ''}" tabindex="0" role="button" data-plan-editor-open="${esc(item.key)}" data-plan-editor-depot="${esc(item.depot)}">
+              <div class="plan-detail-head">
+                <div>
+                  <h3>${esc(item.name || item.query || item.barcode || 'Urun')}</h3>
+                  <div class="plan-detail-tags">
+                    <span>${esc(item.depot || 'Depo yok')}</span>
+                    <span>${esc(item.desiredQty || 1)} adet</span>
+                    <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
+                  </div>
+                </div>
+                <div class="plan-detail-price">TL ${(Number(item.totalCost) || 0).toFixed(2).replace('.', ',')}</div>
+              </div>
+              <div class="plan-detail-grid">
+                <div class="plan-detail-cell">
+                  <span>Birim Maliyet</span>
+                  <strong>${Number(item.effectiveUnit) > 0 ? 'TL ' + Number(item.effectiveUnit).toFixed(2).replace('.', ',') : 'Bilinmiyor'}</strong>
+                </div>
+                <div class="plan-detail-cell">
+                  <span>Barkod</span>
+                  <strong>${item.barcode ? esc(item.barcode) : 'Yok'}</strong>
+                </div>
+                <div class="plan-detail-cell">
+                  <span>Secilen Depo</span>
+                  <strong>${esc(item.depot || 'Depo yok')}</strong>
+                </div>
+              </div>
+              <div class="plan-detail-quick-actions">
+                <div class="plan-detail-qty-controls">
+                  <button class="action-qty-step" type="button" data-plan-card-minus="${esc(item.key)}" data-plan-card-minus-depot="${esc(item.depot)}" aria-label="Azalt">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                  <span class="plan-detail-qty-value">${Math.max(parseInt(item.desiredQty, 10) || 1, 1)} adet</span>
+                  <button class="action-qty-step" type="button" data-plan-card-plus="${esc(item.key)}" data-plan-card-plus-depot="${esc(item.depot)}" aria-label="Artir">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                </div>
+                <div class="plan-detail-action-buttons">
+                  ${item.depotUrl ? `<button class="btn btn-outline" type="button" data-plan-card-depot="${esc(item.key)}" data-plan-card-depot-name="${esc(item.depot)}">Depoya Git</button>` : ''}
+                  <button class="plan-item-remove" type="button" data-plan-card-remove="${esc(item.key)}" data-plan-card-remove-depot="${esc(item.depot)}">Sil</button>
+                </div>
+              </div>
+              <div class="plan-detail-hint">Kartin ustune tiklayarak depot secimi, miktar ve MF detaylarini sag panelde duzenleyin.</div>
+            </article>
+          `;
+          }).join('')}
+        </div>
+      </section>
+    `;
+
+    container.querySelectorAll('[data-plan-editor-open]').forEach((card) => {
+      const openEditor = () => {
+        openPlanEditorDrawer(card.dataset.planEditorOpen, card.dataset.planEditorDepot);
+      };
+      card.addEventListener('click', (event) => {
+        if (event.target.closest('button, input, a')) return;
+        openEditor();
+      });
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openEditor();
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-plan-card-minus]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const item = plan.find((entry) => entry.key === btn.dataset.planCardMinus && entry.depot === btn.dataset.planCardMinusDepot);
+        if (!item) return;
+        updateOrderPlanItemQuantity(item.key, item.depot, Math.max((parseInt(item.desiredQty, 10) || 1) - 1, 1));
+      });
+    });
+
+    container.querySelectorAll('[data-plan-card-plus]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const item = plan.find((entry) => entry.key === btn.dataset.planCardPlus && entry.depot === btn.dataset.planCardPlusDepot);
+        if (!item) return;
+        updateOrderPlanItemQuantity(item.key, item.depot, Math.max(parseInt(item.desiredQty, 10) || 1, 1) + 1);
+      });
+    });
+
+    container.querySelectorAll('[data-plan-card-depot]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const item = plan.find((entry) => entry.key === btn.dataset.planCardDepot && entry.depot === btn.dataset.planCardDepotName);
+        if (item?.depotUrl) copyAndOpenDepot(item.depotUrl, item.depotId || '');
+      });
+    });
+
+    container.querySelectorAll('[data-plan-card-remove]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        removeOrderPlanItem(btn.dataset.planCardRemove, btn.dataset.planCardRemoveDepot);
+      });
+    });
+
+    document.getElementById('exportPlanCsvBtn')?.addEventListener('click', () => exportOrderPlanCsv(plan));
+  } catch (error) {
+    console.error('renderOrderPlanDetail failed:', error);
+    pushDiagnosticEvent('order-plan-error', 'Plan detay ekrani render edilemedi', {
+      message: error?.message || String(error),
+    });
+    container.innerHTML = `
+      <section class="ops-card plan-detail-shell">
+        <div class="ops-empty">
+          <strong>Plan detaylari yuklenemedi</strong>
+          <span>Kayitlar yeniden okunurken bir hata olustu. Ana sayfaya donup tekrar deneyin.</span>
+        </div>
+      </section>
+    `;
+  }
+}
+
+// ── Bulk Search ──────────────────────────────────────────────────
 
 let _bulkSearchActive = false;
+
+function closeExpandedBulkCards(exceptCard = null) {
+  document.querySelectorAll('.bulk-result-card.bulk-result-expanded').forEach((openCard) => {
+    if (exceptCard && openCard === exceptCard) return;
+    openCard.classList.remove('bulk-result-expanded');
+    const panel = openCard.querySelector('.bulk-inline-panel');
+    if (panel) panel.hidden = true;
+  });
+}
 
 async function searchOneBulkQuery(query) {
   if (!cachedConfig) await loadDepotStatus();
@@ -2647,6 +3482,7 @@ function renderBulkResultCard(query, items, container) {
     selectedKey: '',
     qty: 1,
     quoteVersion: 0,
+    inlineOpen: false,
     userSelected: false,  // true only after explicit user click on a row
   };
 
@@ -2715,6 +3551,7 @@ function renderBulkResultCard(query, items, container) {
         }
         renderOfferRows(rowsEl);
         syncFooter();
+        openInlinePanel();
       };
       row.addEventListener('click', select);
       row.addEventListener('keydown', e => {
@@ -2735,6 +3572,95 @@ function renderBulkResultCard(query, items, container) {
       const footerLabel = shouldUseMfForQty(state.qty) ? 'Odenecek: ' : '';
       footerPrice.textContent = `${footerLabel}TL ${opt.totalCost.toFixed(2).replace('.', ',')}`;
     }
+    renderInlinePanel();
+  }
+
+  function openInlinePanel() {
+    state.inlineOpen = true;
+    renderInlinePanel();
+    closeExpandedBulkCards(card);
+    card.classList.add('bulk-result-expanded');
+    const panel = card.querySelector('.bulk-inline-panel');
+    if (panel) panel.hidden = false;
+  }
+
+  function closeInlinePanel() {
+    state.inlineOpen = false;
+    card.classList.remove('bulk-result-expanded');
+    const panel = card.querySelector('.bulk-inline-panel');
+    if (panel) panel.hidden = true;
+  }
+
+  function renderInlinePanel() {
+    const panel = card.querySelector('.bulk-inline-panel');
+    const opt = getSelectedOption();
+    if (!panel || !opt) return;
+    if (!state.inlineOpen) {
+      panel.hidden = true;
+      return;
+    }
+
+    const barcode = String(opt.sourceItem?.barcode || opt.sourceItem?.barkod || query || '').trim();
+    const detailText = getBulkOfferDetailText(opt, state.qty);
+    const totalStr = opt.totalCost.toFixed(2).replace('.', ',');
+    const unitStr = opt.effectiveUnit.toFixed(2).replace('.', ',');
+    const qtyLabel = `${state.qty} adet`;
+    const planningLabel = opt.mfStr ? 'MF plani' : 'Normal alim';
+
+    panel.innerHTML = `
+      <div class="bulk-inline-head">
+        <div class="bulk-inline-copy">
+          <h4>${esc(name)}</h4>
+          <div class="bulk-inline-tags">
+            <span>${esc(opt.depot || '')}</span>
+            <span>${esc(qtyLabel)}</span>
+            <span>${esc(planningLabel)}</span>
+          </div>
+        </div>
+        <div class="bulk-inline-price">TL ${totalStr}</div>
+      </div>
+      <div class="bulk-inline-grid">
+        <div class="bulk-inline-cell">
+          <span>Birim Maliyet</span>
+          <strong>TL ${unitStr}</strong>
+        </div>
+        <div class="bulk-inline-cell">
+          <span>Barkod</span>
+          <strong>${barcode ? esc(barcode) : 'Yok'}</strong>
+        </div>
+        <div class="bulk-inline-cell">
+          <span>Secilen Depo</span>
+          <strong>${esc(opt.depot || '')}</strong>
+        </div>
+      </div>
+      <div class="bulk-inline-meta">${esc(detailText)}</div>
+      <div class="bulk-inline-actions">
+        <button class="btn btn-outline" type="button" data-bulk-panel-open>Urunu Ac</button>
+        ${opt.depotUrl ? '<button class="btn btn-primary" type="button" data-bulk-panel-depot>Depoya Git</button>' : ''}
+        <button class="plan-item-remove" type="button" data-bulk-panel-close>Kapat</button>
+      </div>
+    `;
+
+    panel.querySelector('[data-bulk-panel-open]')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openSavedProduct({
+        barcode,
+        query: barcode || query,
+        name,
+      });
+    });
+
+    panel.querySelector('[data-bulk-panel-depot]')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      copyAndOpenDepot(opt.depotUrl, opt.depotId || '');
+    });
+
+    panel.querySelector('[data-bulk-panel-close]')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      closeInlinePanel();
+    });
+
+    panel.hidden = false;
   }
 
   async function refreshQuotes(rowsEl) {
@@ -2767,6 +3693,7 @@ function renderBulkResultCard(query, items, container) {
       <div class="bulk-result-name">${esc(name)}</div>
     </div>
     <div class="bulk-offer-rows"></div>
+    <div class="bulk-inline-panel" hidden></div>
     <div class="bulk-result-footer">
       <div class="bulk-footer-qty">
         <button class="action-qty-step" data-bulk-minus type="button">
@@ -2807,6 +3734,21 @@ function renderBulkResultCard(query, items, container) {
     addBtn.textContent = 'Eklendi ✓';
     addBtn.disabled = true;
   });
+
+  card.addEventListener('click', (event) => {
+    if (event.target.closest('button, input, .bulk-inline-panel')) return;
+    openInlinePanel();
+  });
+
+  card.addEventListener('keydown', (event) => {
+    if (event.target !== card) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openInlinePanel();
+    }
+  });
+
+  card.tabIndex = 0;
 
   container.appendChild(card);
 
@@ -2953,6 +3895,9 @@ function renderHomeOrderPlan() {
               <span>${esc(item.depot)}</span>
               <span>${esc(item.desiredQty)} adet</span>
               <span>${item.planningMode === 'mf' && item.mfStr ? esc(item.mfStr) : 'Normal alim'}</span>
+            </div>
+            <div class="plan-item-detail">
+              ${item.planningMode === 'mf' && item.mfStr ? `MF ${esc(item.mfStr)}` : 'Normal alim'}
             </div>
           </button>
           <button class="plan-item-remove" data-plan-remove="${esc(item.key)}" data-plan-remove-depot="${esc(item.depot)}" type="button">Sil</button>
@@ -3132,7 +4077,7 @@ function renderHomeDashboard() {
   openPlanBtn?.addEventListener('click', openOrderPlanDetail);
 })();
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ History Ã¢â€â‚¬Ã¢â€â‚¬
+// ──── History ────
 function saveHistory(items, query) {
   if (!items || items.length === 0) return;
   const normalizedItems = dedupeSearchItems(items, query);
@@ -3183,7 +4128,7 @@ function openHistorySearch(query, barcode) {
   const selectedDrug = document.getElementById('selectedDrug');
   if (barcode) {
     selectedBarcode = barcode;
-    document.getElementById('selectedDrugName').textContent = query || 'GeÃƒÂ§miÃ…Å¸ AramasÃ„Â±';
+    document.getElementById('selectedDrugName').textContent = query || 'Geçmiş Araması';
     document.getElementById('selectedDrugCode').textContent = 'Barkod: ' + barcode;
     selectedDrug.style.display = 'flex';
   } else {
@@ -3327,8 +4272,9 @@ function applyHumanUiCopy() {
   document.title = 'Eczane - İlaç Fiyat Karşılaştırma';
 
   const textMap = [
-    ['.profile-menu-item:nth-of-type(1)', 'Arama Geçmişi'],
-    ['.profile-menu-item:nth-of-type(2)', 'Depo Ayarları'],
+    ['#profileHistoryBtn', 'Geçmiş'],
+    ['#profileSettingsBtn', 'Ayarlar'],
+    ['#profileQuitBtn', 'Uygulamayı Kapat'],
     ['.profile-menu-item.logout-item', 'Çıkış Yap'],
     ['.hero-pill', 'Hızlı, net, güvenilir'],
     ['.hero h1', 'En uygun ilacı\nhızla bulun'],
@@ -3344,8 +4290,8 @@ function applyHumanUiCopy() {
     ['.home-history-header p', 'Son sorgularınıza tek tıkla geri dönün.'],
     ['#loading div:last-child', 'Depolardan fiyat bilgileri alınıyor...'],
     ['#searchActionProduct', 'Seçili Ürün'],
-    ['#page-settings .settings-header h2', 'Depo Ayarları'],
-    ['#page-settings .settings-header p', 'Depo bağlantılarınızı buradan yönetin.'],
+    ['#page-settings .settings-header h2', 'Ayarlar'],
+    ['#page-settings .settings-header p', 'Uygulama davranışlarını, depo bağlantılarını ve geliştirici yardımcılarını buradan yönetin.'],
     ['#page-history .settings-header h2', 'Arama Geçmişi'],
     ['#page-history .settings-header p', 'Geçmiş ilaç aramaları ve fiyat karşılaştırmaları.'],
     ['#page-order-plan .settings-header h2', 'Aktif Sipariş Planı'],
@@ -3430,4 +4376,4 @@ function applyHumanUiCopy() {
   }
 }
 
-// Not: applyHumanUiCopy() ve renderHomeDashboard() artÃ„Â±k initApp() iÃƒÂ§inde ÃƒÂ§aÃ„Å¸rÃ„Â±lÃ„Â±yor.
+// Not: applyHumanUiCopy() ve renderHomeDashboard() artık initApp() içinde çağrılıyor.

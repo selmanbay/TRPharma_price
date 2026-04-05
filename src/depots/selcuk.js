@@ -121,6 +121,18 @@ class SelcukDepot {
    * Ä°laÃ§ arama â€” barkod veya isim ile
    */
   async search(query) {
+    const parsed = await this._searchProducts(query);
+    if (parsed.error || !parsed.results?.length) {
+      return parsed;
+    }
+    return await this._fetchMFAndReturn(parsed.results);
+  }
+
+  async autocompleteSearch(query) {
+    return await this._searchProducts(query);
+  }
+
+  async _searchProducts(query) {
     if (!this.cookies) {
       const loginResult = await this.login();
       if (!loginResult.success) {
@@ -129,54 +141,14 @@ class SelcukDepot {
     }
 
     try {
-      const res = await axios.post(
-        `${BASE_URL}/Siparis/hizlisiparis-ajax.aspx`,
-        new URLSearchParams({
-          action: 'GetUrunler',
-          searchText: query,
-          isInculude: 'false',
-          isStoktakiler: 'false',
-          siralama: 'ilacASC',
-          marka: '',
-          baslangicSayfasi: '0',
-          topRowNum: '0',
-          sayfaMaxRowAdet: '20',
-          s: 's',
-        }).toString(),
-        {
-          headers: {
-            ...AJAX_HEADERS,
-            cookie: this.cookies,
-            origin: BASE_URL,
-            referer: `${BASE_URL}/Siparis/hizlisiparis.aspx`,
-          },
-          timeout: 6000,
-          ...AXIOS_NO_PROXY,
-        }
-      );
-
-      const data = res.data;
-
-      // Session expire olmuÅŸsa re-login dene
-      if (data.hataId && data.hataId !== 0) {
-        // Ä°lk denemede hata aldÄ±ysa cookie'leri temizleyip tekrar login dene
-        this.clearCookies();
-        const loginResult = await this.login();
-        if (!loginResult.success) {
-          return { depot: this.name, error: loginResult.error, results: [] };
-        }
-        // Tekrar arama yap
-        return this._doSearch(query);
-      }
-
-      const parsed = this._parseResults(data);
-      return await this._fetchMFAndReturn(parsed.results);
+      const data = await this._requestSearch(query);
+      return this._parseResults(data);
     } catch (err) {
       return { depot: this.name, error: err.message, results: [] };
     }
   }
 
-  async _doSearch(query) {
+  async _requestSearch(query, allowRelogin = true) {
     try {
       const res = await axios.post(
         `${BASE_URL}/Siparis/hizlisiparis-ajax.aspx`,
@@ -199,14 +171,35 @@ class SelcukDepot {
             origin: BASE_URL,
             referer: `${BASE_URL}/Siparis/hizlisiparis.aspx`,
           },
-          timeout: 6000,
+          timeout: 10000,
           ...AXIOS_NO_PROXY,
         }
       );
-      const parsed = this._parseResults(res.data);
-      return await this._fetchMFAndReturn(parsed.results);
+
+      const data = res.data;
+      if (data.hataId && data.hataId !== 0) {
+        if (!allowRelogin) {
+          throw new Error(data.hataStr || 'Selçuk arama isteği başarısız');
+        }
+        this.clearCookies();
+        const loginResult = await this.login();
+        if (!loginResult.success) {
+          throw new Error(loginResult.error || 'Selçuk oturumu yenilenemedi');
+        }
+        return await this._requestSearch(query, false);
+      }
+
+      return data;
     } catch (err) {
-      return { depot: this.name, error: err.message, results: [] };
+      if (!allowRelogin) {
+        throw err;
+      }
+      this.clearCookies();
+      const loginResult = await this.login();
+      if (!loginResult.success) {
+        throw new Error(loginResult.error || err.message || 'Selçuk arama isteği başarısız');
+      }
+      return await this._requestSearch(query, false);
     }
   }
 

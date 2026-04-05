@@ -11,6 +11,10 @@ Bu dosya sonraki agentin hizli toparlanmasi icin guncel teknik notlari tutar.
 - Kullanici bir depo satirina tiklayarak veya satirdaki `Plana Sec` butonuna basarak plan icin secili depoyu degistirebiliyor.
 - `Siparis Planina Ekle` butonu en ucuz teklifi degil, o anda secili olan depo teklifini ve secili miktari kullanir.
 - Electron icindeki depo oturumlari kalici degil; `Depoya Git` davranisi Chrome uzerinden kalmalidir.
+- Ana sayfadaki kisa plan karti ile detay plan ekrani arasinda bilgi parity korunur; MF/planlama satiri ikisinde de gorunmelidir.
+- Plan detay sayfasi render oncesi `normalizeOrderPlanItem()` ile tekrar normalize edilir; bozuk kayit varsa sayfa tamamen bos kalmamalidir.
+- Plan detay ekraninda karta tiklamak urunu acmaz; ilgili kalem icin inline edit/aksiyon katmanini acar.
+- Aktif plan inline katmaninda qty +/- duzenleme, `Urunu Ac`, `Depoya Git` ve `Sil` aksiyonlari vardir.
 
 ## Quantity Bazli Fiyat Mimarisi
 
@@ -37,6 +41,10 @@ Bu dosya sonraki agentin hizli toparlanmasi icin guncel teknik notlari tutar.
 - Bulk search qty=2+ iken normal aramadaki quantity/MF helper zincirini kullanir.
 - Bulk search qty=2+ iken satirdaki ana fiyat `Odenecek`, alt fiyat ise `Efektif birim` olarak okunur.
 - Bulk search detay metninde `al / gel` dili kullanilmaz; ozet `Hedef X adet · MF Y+Z` formatindadir.
+- Bulk sonuc kartinin buton ve input disindaki alani tiklanabilir; tiklaninca ayni kart icinde inline plan yonetim paneli acilir.
+- Inline panel secili depo, barkod, birim maliyet, toplam maliyet ve `Urunu Ac / Depoya Git / Kapat` aksiyonlarini gosterir.
+- Bulk ekranda ayni anda tek kart expanded tutulur; yeni kart acilinca onceki inline panel kapanir.
+- Inline panel gorunurlugu artik `state.inlineOpen` ile tutulur; acma sirasinda panel render'i zorunlu tetiklenir.
 - Bu davranisin merkezi helperlari:
   - `buildUnitOptions()`
   - `getFallbackPlannerOptions()`
@@ -59,6 +67,18 @@ Bu dosya sonraki agentin hizli toparlanmasi icin guncel teknik notlari tutar.
 - Alliance urun sayfasi URL tabanli degildir; Chrome tarafinda dogrudan urune gitmek yerine `QuickOrder` fallback kullanilir.
 - Bazi ortamlarda bozuk sistem proxy degerleri olabilir; Selcuk/Nevzat/Alliance adapterlarindaki `proxy: false` kaldirilmamali.
 - `fetchQuotedOption()` basarisiz live quote sonucunu cache'e yazmamalidir; aksi halde bulk ekrani fallback'e kilitlenir.
+
+## Search Depot Hotfix - 2026-04-05 16:45
+
+- Selcuk ve Nevzat'in sonuc vermemesi name alias bug'indan degil, stale cookie + redirect/timeout durumundan da kaynaklaniyordu.
+- Selcuk arama request'i bozuk oturumda `timeout of 6000ms exceeded` ile dusuyordu.
+- Nevzat arama request'i bozuk oturumda `Maximum number of redirects exceeded` ile dusuyordu.
+- Iki adapter da artik search seviyesinde `cookie temizle -> login yenile -> ayni sorguyu bir kez tekrar dene` davranisi uygular.
+- Search timeout'lari Selcuk/Nevzat icin 10000ms yapildi.
+- Canli adapter testi su sonucu verdi:
+  - `8683060010220` -> `Selcuk Ecza` -> `600,00`
+  - `8699522705009` -> `Nevzat Ecza` -> `138,78`
+- Bu nedenle Selcuk/Nevzat tekrar kaybolursa ilk bakilacak yer `src/depots/selcuk.js::_requestSearch()` ve `src/depots/nevzat.js::_requestSearch()` olmalidir.
 ## Guncel Ek Not - 2026-04-03 01:28
 
 - Siparis plani artik kampanya batch miktarini degil, kullanicinin istedigi adedi saklar.
@@ -92,3 +112,82 @@ Bu dosya sonraki agentin hizli toparlanmasi icin guncel teknik notlari tutar.
 - resolveQuotedOptions() artik Promise.all degil runConcurrent(tasks, 2) kullanir; max 2 quote istegi esanli gider.
 - Barkod aramalarinda scheduleRender bypass edilir - hiz kritik.
 - Tum Faz 1 korumalari (_activeSearchId, _activeQuoteId, authFetch timeout, waitForServer) aktif.
+
+---
+
+## Search Engine (v1.0 — 2026-04-05)
+
+### Mimari
+- `src/search-engine.js` — Provider Registry Pattern
+- Her depo bir **search provider** olarak kayit olur: `searchEngine.register(id, {name, searchFn})`
+- Providerlar `activate(id)` / `deactivate(id)` ile yonetilir
+- `search(query, {onResult, onDone, onError})` — tum aktif providerlar **paralel** sorgulanir
+
+### SSE Endpoint
+- `GET /api/search-smart?q=...&token=...`
+- `Content-Type: text/event-stream`
+- Event tipleri:
+  - `results` — {depotId, depot, depotUrl, results[]}
+  - `error` — {depotId, depot, error}
+  - `done` — {} (tum providerlar tamamlandi)
+
+### Frontend Entegrasyonu
+- `doSearch()` → `new EventSource(sseUrl)` — tek baglanti, tum depolar
+- `_activeEventSource` — onceki SSE baglantilarini kapatir (race condition)
+- Mevcut `scheduleRender()`, `_activeSearchId`, `MIN_GATHER_TIME` korunur
+
+### Search Dayaniklilik Notu (2026-04-05 13:45)
+
+- Search SSE stream'i `done` event'inden sonra dogal olarak kapanir; bu kapanis `EventSource.onerror` ile ikinci kez hata gibi islenmemelidir.
+- `renderer/scripts/app.js` icinde `streamCompleted` guard'i bu false-error durumunu engeller.
+- Search ekrani artik yeni arama baslarken eski sonuclari hemen gizlemez; yeni sonuc gelene veya gercek hata/empty state kesinlesene kadar mevcut gorunum korunur.
+- SSE stream koptugunda elde en az bir sonuc varsa UI hata kartina dusmez; mevcut sonuc basarili durum olarak korunur.
+- Bulk search SSE kullanmaz; hala tek tek `/api/search-depot` cagirir.
+- Search loading katmani ilk sonuc geldiginde kapanir; kullanici sonuc gorurken tam ekran spinner ile bloklanmaz.
+- Search watchdog suresi 8000ms'dir; `done` hic gelmezse ve elde sonuc varsa loading kapatilip mevcut sonuc korunur.
+- Search yine bos donerse ikinci asama olarak `searchOneBulkQuery()` fallback'i calisir; bu yol `/api/search-depot` uzerinden aktif depolari tekrar yoklar.
+- Teklif tablosu gorunurken kalan depo yanitlari icin `searchInlineLoading` kullanilir; bu loading `otherDepots` altinda gorunur.
+
+### Search Rollback Notu (2026-04-05 15:40)
+
+- Kullanici geri bildirimiyle normal search akisi tekrar eski guvenilir metoda alindi.
+- `renderer/scripts/app.js` icindeki `doSearch()` artik `EventSource('/api/search-smart')` kullanmaz.
+- Normal search tekrar aktif depolar icin paralel `/api/search-depot` cagrilari ile calisir.
+- Search-smart server tarafinda dursa da normal UI flow icin birincil yol degildir.
+- Rollback sonrasi `doSearch()` icinde `loadDepotStatus()` / `cachedConfig` / `activeDepots` bootstrap blogu eksik kalirsa arama loading'de takilabilir; bu blok kritik olarak geri eklendi.
+- Son hotfix ile `doSearch()` tekrar `_legacy/doSearch-v1.js` prosedurune hizalandi; search icinde deneysel watchdog/inline-loading finalize davranislari kaldirildi.
+- `src/server.js` icindeki `/api/search-depot` route'unda alias tabanli instance secimi eklendi; Selcuk/Nevzat gibi depolar name/encoding farklari nedeniyle dusmemeli.
+
+### Autocomplete Performans Notu (2026-04-05 14:00)
+
+- Autocomplete frontend debounce suresi 120ms'dir.
+- Loading metni sadece istek 120ms ustu surerse gosterilir; bu sayede suggestion daha hizli hissedilir.
+- `renderer/scripts/app.js` icinde query-bazli kucuk suggestion cache vardir.
+- `/api/autocomplete` artik once Selcuk'tan suggestion almaya calisir.
+- Selcuk suggestion vermezse ancak o zaman tum depolar fallback olarak taranir.
+
+### Autocomplete Stabilite Notu (2026-04-05 14:20)
+
+- Suggestion akisi ile normal arama akisi artik bilincli olarak ayridir.
+- `src/depots/selcuk.js` icindeki `autocompleteSearch()` yalniz `GetUrunler` sonucunu dondurur; suggestion ekraninda fiyat/MF zincirine girilmez.
+- Normal search halen `search()` -> `_fetchMFAndReturn()` uzerinden canli fiyat alir.
+- `/api/autocomplete` bir depot `autocompleteSearch()` sagliyorsa onu tercih eder; yoksa `search()` fallback'tir.
+
+### Depo Ekleme Prosedürü
+1. `src/depots/yeni-depo.js` yaz — `search(query)` methodu olan sinif
+2. `server.js` → `DEPOT_CLASSES`'a 1 satir ekle
+3. Config'de credentials tanimla → otomatik olarak engine'e kayit olur
+
+### Geri Alma
+- `_legacy/doSearch-v1.js` — eski frontend kodu + prosedur
+- `_legacy/server-search-v1.js` — eski server search endpoint'leri
+
+## Guncel Not - 2026-04-05 Active Plan Drawer
+- Aktif plan detay kartlari artik sag panel plan duzenleyici aciyor.
+- Duzenleyici barkod uzerinden depo tekliflerini yeniden topluyor, qty degisince resolvePlannerOptions ile MF/canli fiyat guncelliyor.
+- Kaydet aksiyonu plan kaydini secilen depo ve istenen adet ile yeniden yazar.
+
+- Active plan drawer UI refresh: daha genis sag panel, ust toplam karti, daha net depo kartlari ve sticky aksiyon alani.
+
+- Active plan cards now keep quick actions on-card while full editing still opens in right drawer.
+

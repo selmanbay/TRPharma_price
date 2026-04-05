@@ -14,6 +14,10 @@ build/
 config.json
 # DİKKAT: Kullanıcının son arattığı ilaçların listesi (hasta mahremiyeti) gitmeyecektir.
 data/history.json
+# DİKKAT: Auth verisi — şifre hash + JWT secret gitmeyecektir.
+data/auth.json
+data/.secret
+data/history.migrated
 
 # ── Backup & Archives ──
 _archive/

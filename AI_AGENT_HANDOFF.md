@@ -32,6 +32,10 @@ Tarih: 2026-04-03
 - `POST /api/quote-option` sadece canli quote katmanidir; ekran bu endpoint'e bagimli olmamali.
 - `Depoya Git` Chrome tabanli kalmali, Electron icine tasinmamali.
 - `HTTP_PROXY/HTTPS_PROXY/ALL_PROXY` bozuk olabilir; Selcuk/Nevzat/Alliance icin `proxy: false` kritik.
+- Ana sayfadaki plan karti da MF/planlama satirini gostermelidir; detay sayfada var olup home kartta yoksa parity bug'i sayilir.
+- `Plani Incele` bos ekran verirse ilk bak: `renderOrderPlanDetail()` artik defensive try/catch ile sarili ve `order-plan-error` diagnostics eventi atar.
+- Plan detay ekraninda kart govdesine tiklamak artik inline edit panelini acar; urun acma davranisi sadece `Urunu Ac` butonundadir.
+- Inline edit paneli qty +/- ile kayitli kalemin adetini gunceller; hesap simdilik mevcut `effectiveUnit` uzerinden yeniden yazilir.
 - Bulk search tarafinda qty=1 iken MF fallback acilmasi bug kabul edilir.
 - Bulk search qty=1 iken MF bilgisi gorunur ama fiyat birim fiyat olarak kalir.
 - Bulk search qty>1 iken ana fiyat `Odenecek`, alt satir `Efektif birim` olarak okunur.
@@ -72,3 +76,81 @@ Tarih: 2026-04-03
 - Satirda gosterilecek fiyat her zaman `effectiveUnit` (etkin birim fiyat), toplam her zaman `totalCost`'tur.
 - Ham `item.fiyatNum * qty` gibi manuel carpim YAPILMAMALIDIR -- MF kirilimini yansitmaz.
 - MF detayi gosterilirken: `opt.orderQty` (siparis) ve `opt.receiveQty` (gelen) ayri belirtilmeli.
+
+## Search / SSE Debug Notu - 2026-04-05
+
+1. Search ekrani artik `/api/search-smart` SSE endpoint'ini kullanir; bulk search bundan ayridir.
+2. Bug'in kok nedeni: stream tamamlanip `done` geldikten sonra EventSource kapanirken `onerror` tetikleniyor ve UI yanlislikla `Sunucuya baglanilamadi` kartina dusuyordu.
+3. Cozum:
+   - `streamCompleted` guard'i eklendi
+   - partial-result guard'i eklendi
+   - yeni arama baslangicinda eski sonuclari kosulsuz gizleme kaldirildi
+4. Search tekrar sahte hata kartina duserse ilk bakilacak yerler:
+   - `doSearch()` icindeki `evtSource.onerror`
+   - `msg.type === 'done'` blogu
+   - `showSearchErrorState()` cagrilari
+5. Search loading spinner'i ilk sonuc geldiginde kapanir; yeniden uzun sure ortada kaliyorsa `msg.type === 'results'` blogundaki loading temizleme davranisi kontrol edilmelidir.
+6. `done` hic gelmeyen durumlar icin 8000ms watchdog vardir; timeout sonrasi sonuc varsa success korunur, sonuc yoksa retry hata karti acilir.
+7. Search bos donerse ikinci kademe fallback `attemptLegacySearchFallback()` ile `searchOneBulkQuery()` cagrilir.
+8. `src/search-engine.js` artik provider `result.error` degerlerini `onError` olarak propagete eder; sessiz auth/session hatalari bu sayede kaybolmaz.
+
+## Search Rollback Notu - 2026-04-05 15:40
+
+1. Kullanici talebiyle normal arama tekrar eski `/api/search-depot` paralel modeline alindi.
+2. `doSearch()` icinde EventSource/SSE yolu artik aktif degildir.
+3. Kampanya, MF ve depo kapsami sorunlari yasandiginda ilk bakilacak yer tekrar `doSearch()` ve `/api/search-depot` cevabidir.
+4. `otherDepots` altindaki `searchInlineLoading` yalniz parcali sonuc durumunda gorunmelidir.
+5. Rollback sonrasi bir hotfix olarak `doSearch()` icine `loadDepotStatus()` + `activeDepots` bootstrap blogu geri eklendi; bu blok olmadan search loading'de takilabiliyor.
+6. Son durumda `doSearch()` yeniden `_legacy/doSearch-v1.js` ile hizalandi; search davranisi degistirilecekse once o dosyayla diff alinmali.
+7. `src/server.js` icindeki `/api/search-depot` route'unda `aliasesByDepot` hotfix'i vardir; Selcuk/Nevzat gibi depolarin instance secimi burada tamir edildi.
+
+## Autocomplete Notu - 2026-04-05
+
+1. Suggestion gecikmesi icin ilk bakilacak yer `setupAutocomplete()` icindeki debounce ve loading davranisidir.
+2. Yeni ayar:
+   - debounce: 120ms
+   - loading skeleton: 120ms gecikmeli
+   - query cache: aktif
+3. Backend `/api/autocomplete` once Selcuk fast-path dener; sonuc yoksa tum depolara fallback yapar.
+4. Autocomplete tekrar yavaslarsa ilk bak:
+   - `src/server.js` `/api/autocomplete`
+   - `renderer/scripts/app.js` `setupAutocomplete()`
+5. Selcuk suggestion icin agir `search()` degil `autocompleteSearch()` kullanilir; bu yol fiyat/MF hesaplamasi yapmaz.
+6. `calpol` benzeri isim aramalarinda suggestion bos donerse ilk bakilacak yer `src/depots/selcuk.js` icindeki `_searchProducts()` ve `src/server.js` icindeki `runAutocompleteSearch()` yardimcisidir.
+
+## Bulk Inline Panel Notu - 2026-04-05
+
+1. Bulk sonuc kartlarinda buton/input disindaki alan tiklaninca inline plan yonetim paneli acilir.
+2. Offer row click hem secimi gunceller hem de paneli acar; bu cift davranis korunmali.
+3. `button`, `input` ve panel ic aksiyonlari kart geneli click handler'ina bubble etmemelidir.
+4. Tek acik kart davranisi `closeExpandedBulkCards(exceptCard)` ile saglanir.
+5. Inline panel ayrik state kullanmaz; `state.options`, `state.selectedKey` ve `state.qty` uzerinden render olur.
+6. Son hotfix ile panel gorunurlugu `state.inlineOpen` uzerinden tutulur; `openInlinePanel()` icinde `renderInlinePanel()` zorunlu cagrilir.
+
+## Search Depot Hotfix - 2026-04-05 16:45
+
+1. Kullanici raporuna gore Selcuk ve Nevzat search sonuclari yeniden kayboldu.
+2. Canli adapter testi dogrudan depot siniflari uzerinden yapildi:
+   - Selcuk eski durumda `timeout of 6000ms exceeded`
+   - Nevzat eski durumda `Maximum number of redirects exceeded`
+3. Kök neden stale cookie / bozuk session idi; sadece `search-depot` alias hotfix'i yeterli degildi.
+4. Cozum:
+   - `src/depots/selcuk.js` `_requestSearch()` catch-level relogin retry
+   - `src/depots/nevzat.js` merkezi `_requestSearch()` helper + relogin retry
+   - timeout 10000ms
+5. Dogrulama sonucu:
+   - `8683060010220` -> Selcuk -> 1 sonuc -> `600,00`
+   - `8699522705009` -> Nevzat -> 1 sonuc -> `138,78`
+6. Kullanici hala bu iki depoyu gormuyorsa bir sonraki adim UI degil, route/log bazli tekrar `/api/search-depot` gozlemi olmalidir.
+
+## Handoff Update - 2026-04-05 Active Plan Drawer
+- Active order plan edit UX moved from inline section to right-side drawer.
+- Drawer state lives in planEditorDrawerState in renderer/scripts/app.js.
+- Clicking a plan card now opens openPlanEditorDrawer(key,depot).
+- Drawer re-fetches depot offers via searchOneBulkQuery(barcode), then reuses getFallbackPlannerOptions/resolvePlannerOptions for MF and live quote behavior.
+- Save path uses addPlannerOptionToOrderPlan(selectedOption, qty) and removes old entry if depot changed.
+
+- Active plan right drawer visual hierarchy refreshed. Look for CSS classes plan-editor-* in renderer/styles/main.css.
+
+- Active plan detail cards expose on-card quick actions (minus/plus, depot open, delete) in addition to the right drawer editor.
+

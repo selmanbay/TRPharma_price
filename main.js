@@ -98,13 +98,6 @@ function createWindow() {
     mainWindow.show();
   });
 
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) {
-      e.preventDefault();
-      mainWindow.hide();
-    }
-  });
-
   mainWindow.on('maximize', () => {
     mainWindow.webContents.send('maximize-change', true);
   });
@@ -257,6 +250,11 @@ ipcMain.on('maximize', () => {
 
 ipcMain.on('close', () => {
   if (mainWindow) mainWindow.close();
+});
+
+ipcMain.on('quit-app', () => {
+  isQuitting = true;
+  app.quit();
 });
 
 ipcMain.handle('is-maximized', () => {
@@ -446,7 +444,7 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  // On Windows, keep app running in tray
+  app.quit();
 });
 
 app.on('web-contents-created', (event, contents) => {

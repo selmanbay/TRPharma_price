@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const DepotManager = require('./depot-manager');
+const SearchEngine = require('./search-engine');
 const SelcukDepot = require('./depots/selcuk');
 const NevzatDepot = require('./depots/nevzat');
 const AnadoluPharmaDepot = require('./depots/anadolu-pharma');
@@ -18,8 +19,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'renderer')));
 
-// Depot manager
+// Depot manager + Search engine
 const manager = new DepotManager();
+const searchEngine = new SearchEngine();
 
 const CONFIG_PATH = getConfigPath();
 
@@ -52,10 +54,11 @@ function saveConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 }
 
-// Başlangıçta config'den depot'ları yükle
+// Başlangıçta config'den depot'ları yükle + Search Engine provider kayıtları
 function initDepots() {
   const config = loadConfig();
   manager.depots = [];
+  searchEngine.clear();
 
   for (const [depotId, depotInfo] of Object.entries(DEPOT_CLASSES)) {
     const depotConfig = config.depots[depotId];
@@ -68,6 +71,14 @@ function initDepots() {
         depot.setToken(depotConfig.token, depotConfig.ciSession || null);
       }
       manager.addDepot(depot);
+
+      // Search Engine: her depo bir provider olarak kayıt olur
+      searchEngine.register(depotId, {
+        name: depotInfo.name,
+        searchFn: (query) => depot.search(query),
+      });
+      searchEngine.activate(depotId);
+
       console.log(`[+] ${depotInfo.name} yüklendi`);
     }
   }
@@ -76,7 +87,12 @@ function initDepots() {
 function getConfiguredDepotById(depotId) {
   const depotInfo = DEPOT_CLASSES[depotId];
   if (!depotInfo) return null;
-  return manager.depots.find((d) => d.name === depotInfo.name) || null;
+  const aliases = new Set([
+    depotInfo.name,
+    depotId === 'selcuk' ? 'Selçuk Ecza' : '',
+    depotId === 'anadolu-itriyat' ? 'Anadolu İtriyat' : '',
+  ].filter(Boolean));
+  return manager.depots.find((d) => aliases.has(d.name)) || null;
 }
 
 // ── Auth Routes (public) ──────────────────────────────────────────────────────
@@ -117,6 +133,13 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 
 // ── API Routes ──
 
+function runAutocompleteSearch(depot, query) {
+  if (depot && typeof depot.autocompleteSearch === 'function') {
+    return depot.autocompleteSearch(query);
+  }
+  return depot.search(query);
+}
+
 // Autocomplete — Selçuk'tan isim+barkod, diğer depolardan yedek barkod
 app.get('/api/autocomplete', requireAuth, async (req, res) => {
   const { q } = req.query;
@@ -124,22 +147,43 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
     return res.json({ suggestions: [] });
   }
 
-  // Tüm depolardan paralel arama yap
-  const promises = manager.depots.map(d => d.search(q).catch(() => ({ depot: d.name, results: [] })));
-  const allResults = await Promise.all(promises);
+  const selcukDepot = manager.depots.find(d => d.name === 'Selçuk Ecza');
+  let primaryResults = null;
+  let source = '';
+  let allResults = [];
 
-  // Selçuk sonuçlarını öncelikli kullan
-  const selcukResult = allResults.find(r => r.depot === 'Selçuk Ecza' && r.results?.length > 0);
-  let primaryResults = selcukResult?.results;
-  let source = selcukResult?.depot;
+  // Önce hızlı yol: Selçuk varsa sadece ondan suggestion üret
+  if (selcukDepot) {
+    try {
+      const selcukResult = await runAutocompleteSearch(selcukDepot, q);
+      allResults = [selcukResult];
+      if (selcukResult?.results?.length) {
+        primaryResults = selcukResult.results;
+        source = selcukResult.depot || 'Selçuk Ecza';
+      }
+    } catch (_) {
+      allResults = [];
+    }
+  }
 
-  // Selçuk yoksa ilk sonuç dönen depoyu kullan
+  // Selçuk sonuç vermezse fallback: tüm aktif depolar
   if (!primaryResults || primaryResults.length === 0) {
-    for (const r of allResults) {
-      if (r.results && r.results.length > 0) {
-        primaryResults = r.results;
-        source = r.depot;
-        break;
+    const promises = manager.depots.map(d =>
+      runAutocompleteSearch(d, q).catch(() => ({ depot: d.name, results: [] }))
+    );
+    allResults = await Promise.all(promises);
+
+    const selcukResult = allResults.find(r => r.depot === 'Selçuk Ecza' && r.results?.length > 0);
+    primaryResults = selcukResult?.results;
+    source = selcukResult?.depot;
+
+    if (!primaryResults || primaryResults.length === 0) {
+      for (const r of allResults) {
+        if (r.results && r.results.length > 0) {
+          primaryResults = r.results;
+          source = r.depot;
+          break;
+        }
       }
     }
   }
@@ -148,8 +192,6 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
     return res.json({ suggestions: [] });
   }
 
-  // Selçuk sonuçları için GetIlacDetay'den barkod çek (paralel)
-  const selcukDepot = manager.depots.find(d => d.name === 'Selçuk Ecza');
   const isSelcuk = source === 'Selçuk Ecza';
 
   // Diğer depolardan gelen barkodları yedek olarak topla
@@ -231,11 +273,19 @@ app.get('/api/search-depot', requireAuth, async (req, res) => {
   if (!q || !depotId) return res.status(400).json({ error: 'Sorgu param eksik' });
 
   // İlgili depot instance'ını bul
-  let targetDepot = null;
   const config = loadConfig();
+  let targetDepot = null;
   if (config.depots[depotId]) {
-    const depotInfo = DEPOT_CLASSES[depotId];
-    targetDepot = manager.depots.find(d => d.name === depotInfo.name);
+    const aliasesByDepot = {
+      selcuk: ['Selçuk Ecza', 'SelÃ§uk Ecza'],
+      nevzat: ['Nevzat Ecza'],
+      'anadolu-pharma': ['Anadolu Pharma'],
+      'anadolu-itriyat': ['Anadolu İtriyat', 'Anadolu Ä°triyat'],
+      alliance: ['Alliance Healthcare'],
+      sentez: ['Sentez B2B'],
+    };
+    const aliases = new Set([...(aliasesByDepot[depotId] || []), DEPOT_CLASSES[depotId]?.name].filter(Boolean));
+    targetDepot = manager.depots.find(d => aliases.has(d.name)) || null;
   }
 
   if (!targetDepot) return res.status(404).json({ error: 'Depot ayarlı değil', results: [] });
@@ -270,6 +320,56 @@ app.get('/api/search-depot', requireAuth, async (req, res) => {
   } catch (err) {
     res.json({ depot: targetDepot ? targetDepot.name : depotId, error: err.message, results: [] });
   }
+});
+
+// ── Search Engine SSE Stream ──────────────────────────────────────────────────
+// Tüm aktif depoları paralel sorgular, sonuçları geldikçe SSE event olarak stream eder.
+// Frontend: EventSource('/api/search-smart?q=...&token=...')
+app.get('/api/search-smart', requireAuth, (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ error: 'query gerekli' });
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  let closed = false;
+  req.on('close', () => { closed = true; });
+
+  const write = (payload) => {
+    if (closed) return;
+    try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* client kapandı */ }
+  };
+
+  searchEngine.search(q, {
+    onResult(providerId, results, depotUrl) {
+      const depotInfo = DEPOT_CLASSES[providerId];
+      let url = depotInfo?.url || '';
+      if (url.includes('{query}')) url = url.replace('{query}', encodeURIComponent(q));
+
+      write({
+        type: 'results',
+        depotId: providerId,
+        depot: depotInfo?.name || providerId,
+        depotUrl: depotUrl || url,
+        results: results.map(r => ({ ...r, depot: depotInfo?.name || providerId })),
+      });
+    },
+    onError(providerId, err) {
+      write({
+        type: 'error',
+        depotId: providerId,
+        depot: DEPOT_CLASSES[providerId]?.name || providerId,
+        error: err?.message || String(err),
+      });
+    },
+    onDone() {
+      write({ type: 'done' });
+      if (!closed) res.end();
+    },
+  });
 });
 
 app.post('/api/quote-option', requireAuth, async (req, res) => {
