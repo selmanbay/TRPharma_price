@@ -46,6 +46,7 @@ const AUTH_DEFAULTS = {
   displayName:   'Eczane',
   passwordHash:  null,
   role:          'admin',
+  userId:        null,
 };
 
 function loadAuth() {
@@ -61,7 +62,12 @@ function loadAuth() {
   }
 
   try {
-    return { ...AUTH_DEFAULTS, ...JSON.parse(fs.readFileSync(authPath, 'utf-8')) };
+    const auth = { ...AUTH_DEFAULTS, ...JSON.parse(fs.readFileSync(authPath, 'utf-8')) };
+    if (auth.setupComplete && !auth.userId) {
+      auth.userId = crypto.randomUUID();
+      saveAuth(auth);
+    }
+    return auth;
   } catch {
     return { ...AUTH_DEFAULTS };
   }
@@ -124,6 +130,7 @@ async function setupUser({ displayName, password }) {
     displayName:   displayName || 'Eczane',
     passwordHash,
     role:          'admin',
+    userId:        crypto.randomUUID(),
   };
   saveAuth(auth);
   return auth;
@@ -145,12 +152,13 @@ async function loginUser(password) {
   }
 
   const payload = {
+    userId:      auth.userId,
     role:        auth.role,
     displayName: auth.displayName,
   };
 
   const token = signToken(payload);
-  const user  = { role: auth.role, displayName: auth.displayName };
+  const user  = { userId: auth.userId, role: auth.role, displayName: auth.displayName };
 
   // lastLoginAt güncelle
   auth.lastLoginAt = new Date().toISOString();

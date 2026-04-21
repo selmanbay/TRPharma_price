@@ -28,6 +28,21 @@ Bu dosya sonraki agentin hizli toparlanmasi icin guncel teknik notlari tutar.
   - Sol "Siparis plani ozeti" alanı kart tabanli yatay slider'a cevrildi (`detail-plan-summary-track`), saga/sola kaydirma ve `Buyut/Kucult` toggle eklendi (`scrollDetailPlanSummary`, `toggleDetailPlanSummarySize`).
   - `state.detailPlanSummaryExpanded` ile genis kart modu korunur; CSS `main.css` icinde `v23-plan-summary-*` siniflari eklendi.
 
+- 2026-04-21 (V2.3 branding cleanup — logo/metin):
+  - `midstage/2.3/renderer/mock.html` titlebar ve top-nav icindeki `Eczane Pro V2.3` / `Eczane Pro` metinleri kaldirildi.
+  - Simsek (`bolt`) ikonu yerine eczacilik temali SVG logo (havan-kase + ay yildiz referansli form) kullanildi.
+
+- 2026-04-21 (V2.3 login UX — kirmizi palet + hareketli ilustrasyon):
+  - `main.css` `:root` altina `--brand-*` tokenlari kirmizi sete cekildi (`--brand-500: #dc2626`, `--brand-600: #b91c1c`).
+  - `index.html` login/setup sol paneline donen ilustrasyon kartlari eklendi: `İlaç`, `Seçim`, `Depo`, `Sipariş` (araba).
+  - `auth.css` icinde `auth-illustration-cycle` + `auth-illus-card` + `authIllusCycle` keyframes ile hareketli/degisen sunum eklendi.
+  - Ek olarak fallback login shellinde `Eczane Pro` metni kaldirildi (`scripts/shell-ui.js`, `mock.html`).
+
+- 2026-04-21 (V2.3 gorunmeyen animasyonlar — aktif entrypoint baglama):
+  - Tespit: `index.html` calisan akista `scripts/app.js` yuklenirken, cam modal/animasyonun bir kismi `app-v23.js` tarafinda kalmisti.
+  - Cozum: `app.js` icine `openOrderPlanModal` / `closeOrderPlanModal` + `v23-plan-overlay` HTML painter eklendi; `openOrderPlanDetail()` artik tam ekran cam plan ozeti modalini acar.
+  - Boylece `main.css` icindeki `v23-plan-overlay*` animasyonlari aktif runtime'da gorunur hale geldi.
+
 - 2026-04-21 (V2.3 ilk sorgu — isim vs barkod, V2.2 `doSearch` ile parity):
   - V2.2: `parseQRCode` ciktisi yalnizca **13 hane** ise `query` barkoda cekilir; sonra `isBarcodeQuery(query)`.
   - V2.3 bug: `cleanQuery = parseQRCode(...) || normalizedInput` metin sorguda parse ciktisini zorlayabiliyordu.

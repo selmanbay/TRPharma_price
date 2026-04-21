@@ -44,7 +44,7 @@ class SelcukDepot {
 
     const { hesapKodu, kullaniciAdi, sifre } = this.credentials;
     if (!hesapKodu || !kullaniciAdi || !sifre) {
-      return { success: false, error: 'Hesap kodu, kullanÄ±cÄ± adÄ± ve ÅŸifre gerekli' };
+      return { success: false, error: 'Hesap kodu, kullanici adi ve sifre gerekli' };
     }
 
     try {
@@ -63,7 +63,7 @@ class SelcukDepot {
       const vsgMatch = html.match(/name="__VIEWSTATEGENERATOR"[^>]*value="([^"]*)"/);
 
       if (!vsMatch) {
-        return { success: false, error: 'Login sayfasÄ± parse edilemedi' };
+        return { success: false, error: 'Login sayfasi parse edilemedi' };
       }
 
       // 2) Login POST
@@ -73,7 +73,7 @@ class SelcukDepot {
         txtEczaneKodu: hesapKodu,
         txtKullaniciAdi: kullaniciAdi,
         txtSifre: sifre,
-        btnGiris: 'GiriÅŸ',
+        btnGiris: 'Giriş',
       }).toString();
 
       const loginRes = await axios.post(`${BASE_URL}/Login.aspx`, formData, {
@@ -92,14 +92,14 @@ class SelcukDepot {
       const loginCookies = this._extractCookies(loginRes.headers['set-cookie']);
 
       if (!loginCookies || !loginCookies.includes('BoyutAuth')) {
-        return { success: false, error: 'GiriÅŸ baÅŸarÄ±sÄ±z â€” kullanÄ±cÄ± adÄ± veya ÅŸifre hatalÄ± olabilir' };
+        return { success: false, error: 'Giris basarisiz - kullanici adi veya sifre hatali olabilir' };
       }
 
       // Cookie'leri birleÅŸtir
       this.cookies = sessionCookies + '; ' + loginCookies;
       return { success: true };
     } catch (err) {
-      return { success: false, error: `Login hatasÄ±: ${err.message}` };
+      return { success: false, error: `Login hatasi: ${err.message}` };
     }
   }
 
@@ -389,12 +389,12 @@ class SelcukDepot {
       });
 
       // AÅAMA 2: IlacFiyatHesapla â€” arama ekraninda tekli baz fiyat al
-      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÃ‡UK] AÅŸama 2: ${topItems.length} Ã¼rÃ¼n iÃ§in fiyat hesaplama baÅŸlÄ±yor...`);
+      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELCUK] Asama 2: ${topItems.length} Ã¼rÃ¼n iÃ§in fiyat hesaplama baÅŸlÄ±yor...`);
       const pricePromises = topItems.map((item, i) => {
         const detail = details[i];
         const satisSekli = detail?.kampanyalar?.[0]?.satisSekli || 'A6';
         const etiketFiyati = detail?.kampanyalar?.[0]?.etiketFiyati || item.etiketFiyat || item.fiyat;
-        if (process.env.ECZANE_DEBUG === '1') console.log(`[SELÃ‡UK] item[${i}] kodu=${item.kodu} etiket=${etiketFiyati} satisSekli=${satisSekli} miktar=1 detail=${!!detail}`);
+        if (process.env.ECZANE_DEBUG === '1') console.log(`[SELCUK] item[${i}] kodu=${item.kodu} etiket=${etiketFiyati} satisSekli=${satisSekli} miktar=1 detail=${!!detail}`);
         return this.selcukBirim(item.kodu, item.ilacTip, etiketFiyati, satisSekli)
           .catch(() => null);
       });
@@ -484,4 +484,6 @@ class SelcukDepot {
 }
 
 module.exports = SelcukDepot;
+
+
 

@@ -33,6 +33,13 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
+  --brand-50: #fef2f2;
+  --brand-100: #fee2e2;
+  --brand-200: #fecaca;
+  --brand-500: #dc2626;
+  --brand-600: #b91c1c;
+  --brand-700: #991b1b;
+
   --bg-0: #FFFFFF;
   --bg-1: #FAF7F5;
   --bg-2: #F2ECE9;
@@ -5794,7 +5801,7 @@ body[data-ui-mode="workspace"] .ws-plan-icon-btn.is-danger:hover {
 .approval-row.is-selected .approval-check {
   opacity: 1;
   border-color: var(--brand-500, #6366f1);
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(220, 38, 38, 0.12);
 }
 
 .approval-toolbar .btn-brand:disabled {
@@ -5924,7 +5931,7 @@ body[data-ui-mode="workspace"] .ws-plan-icon-btn.is-danger:hover {
 }
 .v23-plan-overlay__close:active { transform: scale(0.96); }
 .v23-plan-overlay__close:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.6);
+  outline: 2px solid rgba(220, 38, 38, 0.6);
   outline-offset: 2px;
 }
 
@@ -6005,7 +6012,7 @@ body[data-ui-mode="workspace"] .ws-plan-icon-btn.is-danger:hover {
   width: 46px;
   height: 46px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #eef2ff 0%, #fdf2f8 100%);
+  background: linear-gradient(135deg, #fef2f2 0%, #fff1f2 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6091,7 +6098,7 @@ body[data-ui-mode="workspace"] .ws-plan-icon-btn.is-danger:hover {
 .v23-plan-overlay__primary-btn {
   appearance: none;
   border: 1px solid transparent;
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
   color: #fff;
   font-weight: 600;
   font-size: 13.5px;
@@ -6101,17 +6108,17 @@ body[data-ui-mode="workspace"] .ws-plan-icon-btn.is-danger:hover {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 6px 16px -6px rgba(79, 70, 229, 0.5);
+  box-shadow: 0 6px 16px -6px rgba(185, 28, 28, 0.5);
   transition: transform 120ms ease-out, box-shadow 160ms ease-out, filter 160ms ease-out;
 }
 
 .v23-plan-overlay__primary-btn:hover {
   filter: brightness(1.04);
-  box-shadow: 0 10px 22px -8px rgba(79, 70, 229, 0.6);
+  box-shadow: 0 10px 22px -8px rgba(185, 28, 28, 0.6);
 }
 .v23-plan-overlay__primary-btn:active { transform: translateY(1px); }
 .v23-plan-overlay__primary-btn:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.85);
+  outline: 2px solid rgba(220, 38, 38, 0.85);
   outline-offset: 2px;
 }
 

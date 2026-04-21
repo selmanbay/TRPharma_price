@@ -912,7 +912,7 @@ function renderVariantSelectionLayer(groups, query, allItems) {
     card.innerHTML = `
       <div class="v-list-img">${buildVariantImageMarkup(g.imgUrl)}</div>
       <div class="v-list-content">
-        <div class="variant-card-title">${g.originalName}</div>
+        <div class="variant-card-title">${esc(g.originalName)}</div>
         <div class="variant-card-meta">
           <span class="v-list-price">${priceText}</span>
           <span class="v-list-dot"></span>
@@ -1039,6 +1039,17 @@ function renderDetailResults(items, query) {
     bestMfGroup.style.display = 'none';
   }
 
+  const bestCustomerPriceGroup = document.getElementById('bestCustomerPriceGroup');
+  const bestCustomerPrice = document.getElementById('bestCustomerPrice');
+  if (bestCustomerPriceGroup && bestCustomerPrice) {
+    if (Number(bestItem.psfFiyatNum) > 0) {
+      bestCustomerPrice.textContent = formatCurrency(bestItem.psfFiyatNum);
+      bestCustomerPriceGroup.style.display = 'block';
+    } else {
+      bestCustomerPriceGroup.style.display = 'none';
+    }
+  }
+
   const bestLinkEl = document.getElementById('bestDepotLink');
   if (bestItem.depotUrl) {
     bestLinkEl.dataset.url = bestItem.depotUrl;
@@ -1099,7 +1110,10 @@ function renderDetailResults(items, query) {
         <td>
           <span style="color:var(--accent);font-weight:600;font-size:13px;">${esc(item.malFazlasi)}</span>
         </td>
-        <td class="price-cell">TL ${esc(item.fiyat)}</td>
+        <td class="price-cell">
+          <span class="price-cell-main">TL ${esc(item.fiyat)}</span>
+          ${Number(item.psfFiyatNum) > 0 ? `<span class="price-cell-sub">Musteri: ${esc(formatCurrency(item.psfFiyatNum))}</span>` : ''}
+        </td>
         <td>
           <div class="depot-actions">
             ${selectBtnHtml}
@@ -2218,20 +2232,28 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
     dropdown.innerHTML = '';
     dropdown.classList.add('open');
     const items = (data.suggestions || []).slice(0, 10);
-    const regex = new RegExp('(' + escRegex(q) + ')', 'gi');
 
     items.forEach((item) => {
       const div = document.createElement('div');
       div.className = 'suggestion-item';
-      const highlighted = esc(item.ad).replace(regex, '<mark>$1</mark>');
       const barcode = item.barcode || extractBarcode(item.kodu);
-      div.innerHTML = `
-        <span class="suggestion-name">${highlighted}</span>
-        <span class="suggestion-meta">
-          ${barcode ? '<span class="suggestion-code">' + esc(barcode) + '</span>' : ''}
-          <span class="suggestion-price">TL ${esc(item.fiyat)}</span>
-        </span>
-      `;
+      const nameEl = document.createElement('span');
+      nameEl.className = 'suggestion-name';
+      nameEl.appendChild(buildHighlightedNameFragment(item.ad, q));
+
+      const metaEl = document.createElement('span');
+      metaEl.className = 'suggestion-meta';
+      if (barcode) {
+        const codeEl = document.createElement('span');
+        codeEl.className = 'suggestion-code';
+        codeEl.textContent = barcode;
+        metaEl.appendChild(codeEl);
+      }
+      const priceEl = document.createElement('span');
+      priceEl.className = 'suggestion-price';
+      priceEl.textContent = 'TL ' + String(item.fiyat || '');
+      metaEl.appendChild(priceEl);
+      div.replaceChildren(nameEl, metaEl);
       div.addEventListener('click', () => {
         input.value = item.ad;
         dropdown.classList.remove('open');
@@ -2284,6 +2306,43 @@ function setupAutocomplete(inputId, suggestionsId, onSelect) {
 
 function escRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildHighlightedNameFragment(text, query) {
+  const fragment = document.createDocumentFragment();
+  const source = String(text || '');
+  const needle = String(query || '').trim();
+
+  if (!needle) {
+    fragment.appendChild(document.createTextNode(source));
+    return fragment;
+  }
+
+  const regex = new RegExp(escRegex(needle), 'gi');
+  let lastIndex = 0;
+  let match = regex.exec(source);
+
+  while (match) {
+    if (match.index > lastIndex) {
+      fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+    }
+    const mark = document.createElement('mark');
+    mark.textContent = match[0];
+    fragment.appendChild(mark);
+    lastIndex = match.index + match[0].length;
+    match = regex.exec(source);
+  }
+
+  if (lastIndex === 0) {
+    fragment.appendChild(document.createTextNode(source));
+    return fragment;
+  }
+
+  if (lastIndex < source.length) {
+    fragment.appendChild(document.createTextNode(source.slice(lastIndex)));
+  }
+
+  return fragment;
 }
 
 function onDrugSelected(item) {

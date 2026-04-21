@@ -70,7 +70,7 @@ class AllianceDepot {
 
     const { hesapKodu, kullaniciAdi, sifre } = this.credentials;
     if (!hesapKodu || !kullaniciAdi || !sifre) {
-      return { success: false, error: 'Link Kodu, KullanÄ±cÄ± adÄ± ve ÅŸifre gerekli' };
+      return { success: false, error: 'Link Kodu, Kullanici adi ve sifre gerekli' };
     }
 
     try {
@@ -108,7 +108,7 @@ class AllianceDepot {
 
       const postData = postRes.data;
       if (postData && postData.Result === false) {
-        return { success: false, error: postData.Message || 'Login baÅŸarÄ±sÄ±z' };
+        return { success: false, error: postData.Message || 'Login basarisiz' };
       }
 
       const authCookies = this._extractCookies(postRes.headers['set-cookie']);
@@ -116,7 +116,7 @@ class AllianceDepot {
       this.token = token || '_none_';
       return { success: true };
     } catch (err) {
-      return { success: false, error: `Login hatasÄ±: ${err.message}` };
+      return { success: false, error: `Login hatasi: ${err.message}` };
     }
   }
 
@@ -536,4 +536,5 @@ class AllianceDepot {
 }
 
 module.exports = AllianceDepot;
+
 

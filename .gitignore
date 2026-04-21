@@ -30,3 +30,10 @@ Eczane_v*_Guncel/
 # ── OS ──
 Thumbs.db
 .DS_Store
+data/local-accounts.json
+midstage/2.2/config.json
+midstage/2.2/data/auth.json
+midstage/2.2/data/.secret
+midstage/2.2/data/history.json
+midstage/2.2/data/history.migrated
+midstage/2.2/data/local-accounts.json

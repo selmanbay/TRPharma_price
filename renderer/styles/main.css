@@ -2455,6 +2455,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.best-price-sub {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #14532D;
+  font-variant-numeric: tabular-nums;
+}
+
 .best-stock {
   font-size: 17px;
   font-weight: 700;
@@ -2589,6 +2599,20 @@ body {
   color: var(--text-0);
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.price-cell-main {
+  display: block;
+  color: var(--text-0);
+}
+
+.price-cell-sub {
+  display: block;
+  margin-top: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

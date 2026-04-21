@@ -1,34 +1,46 @@
 /**
- * auth-middleware.js — Express middleware (v2.1.1)
+ * auth-middleware.js
  *
- * requireAuth: Bearer token doğrular, req.user'ı set eder
- * v2.1'de tek kullanıcı olduğundan rol kontrolü basit tutulmuştur.
- * İleride multi-user: verifyToken payload'ı genişletilir, bu middleware değişmez.
+ * requireAuth: Bearer token dogrular, req.user bilgisini set eder.
+ * Query-string token kabul edilmez; tum auth header uzerinden gitmelidir.
  */
 
 const { verifyToken } = require('./auth');
 
+function buildUserFromPayload(payload) {
+  return {
+    userId: payload.userId || null,
+    role: payload.role || 'admin',
+    displayName: payload.displayName || 'Eczane',
+  };
+}
+
 function requireAuth(req, res, next) {
-  const authHeader = req.headers['authorization'] || '';
-  // SSE (EventSource) custom header gönderemez — query param fallback
+  const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ')
     ? authHeader.slice(7)
-    : (req.query?.token || null);
+    : null;
 
   if (!token) {
-    return res.status(401).json({ error: 'Giriş gerekli' });
+    return res.status(401).json({ error: 'Giris gerekli' });
   }
 
   try {
     const payload = verifyToken(token);
-    req.user = {
-      role:        payload.role || 'admin',
-      displayName: payload.displayName || 'Eczane',
-    };
-    next();
+    req.user = buildUserFromPayload(payload);
+    return next();
   } catch {
-    return res.status(401).json({ error: 'Oturum süresi doldu' });
+    return res.status(401).json({ error: 'Oturum suresi doldu' });
   }
 }
 
-module.exports = { requireAuth };
+function requireAdmin(req, res, next) {
+  return requireAuth(req, res, () => {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Bu islem icin admin yetkisi gerekli' });
+    }
+    return next();
+  });
+}
+
+module.exports = { requireAuth, requireAdmin };

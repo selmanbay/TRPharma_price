@@ -3070,7 +3070,13 @@ window.closeOrderPlanModal = function closeOrderPlanModal() {
 document.addEventListener('click', (event) => {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
-  const trigger = target.closest('.nav-plan-btn, [data-role="open-plan-modal"]');
+  let trigger = target.closest('.nav-plan-btn, [data-role="open-plan-modal"], #openOrderPlanBtn');
+  if (!trigger) {
+    const maybePlanBtn = target.closest('button.btn.btn-brand');
+    if (maybePlanBtn && /sipariş\s*planı/i.test(String(maybePlanBtn.textContent || ''))) {
+      trigger = maybePlanBtn;
+    }
+  }
   if (!trigger) return;
   event.preventDefault();
   event.stopPropagation();

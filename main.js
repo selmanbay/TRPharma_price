@@ -56,6 +56,7 @@ function findChromeExecutable() {
 
 const UPDATE_CHECK_DELAY_MS = 15 * 1000;
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const SERVER_HOST = '127.0.0.1';
 
 const ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'icon.png');
 const TRAY_ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'tray-icon.png');
@@ -92,7 +93,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL('http://localhost:3000');
+  mainWindow.loadURL(`http://${SERVER_HOST}:3000`);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -275,23 +276,31 @@ ipcMain.handle('check-for-updates', () => {
   return { status: 'checking' };
 });
 
-ipcMain.handle('get-depot-cookies', (_event, depotId) => {
+const DEPOT_ALLOWED_HOSTS = {
+  selcuk: ['webdepo.selcukecza.com.tr'],
+  nevzat: ['webdepo.nevzatecza.com.tr'],
+  'anadolu-pharma': ['b2b.anadolupharma.com'],
+  'anadolu-itriyat': ['b4b.anadoluitriyat.com'],
+  alliance: ['esiparisv2.alliance-healthcare.com.tr'],
+  sentez: ['www.sentezb2b.com', 'sentezb2b.com'],
+};
+
+function isAllowedDepotTarget(depotId, targetUrl) {
   try {
-    const config = loadConfig();
-    const depot = config.depots?.[depotId];
-    if (!depot) return null;
-    return {
-      cookies: depot.cookies || null,
-      token: depot.token || null,
-      ciSession: depot.ciSession || null,
-    };
+    const parsedUrl = new URL(targetUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) return false;
+    const allowedHosts = DEPOT_ALLOWED_HOSTS[depotId] || [];
+    return allowedHosts.some((host) => parsedUrl.hostname === host);
   } catch {
-    return null;
+    return false;
   }
-});
+}
 
 ipcMain.handle('inject-depot-cookies', async (_event, depotId, targetUrl) => {
   try {
+    if (!isAllowedDepotTarget(depotId, targetUrl)) {
+      return { success: false, reason: 'target-not-allowed' };
+    }
     const config = loadConfig();
     const depot = config.depots?.[depotId];
     if (!depot) return { success: false, reason: 'no-depot' };
@@ -360,9 +369,15 @@ ipcMain.handle('open-url-in-chrome', async (_event, targetUrl) => {
       return { success: false, reason: 'missing-url' };
     }
 
+    const parsedUrl = new URL(targetUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return { success: false, reason: 'invalid-protocol' };
+    }
+    const safeUrl = parsedUrl.toString();
+
     const chromePath = findChromeExecutable();
     if (chromePath) {
-      const child = spawn(chromePath, [targetUrl], {
+      const child = spawn(chromePath, [safeUrl], {
         detached: true,
         stdio: 'ignore',
       });
@@ -370,7 +385,7 @@ ipcMain.handle('open-url-in-chrome', async (_event, targetUrl) => {
       return { success: true, mode: 'chrome', path: chromePath };
     }
 
-    await shell.openExternal(targetUrl);
+    await shell.openExternal(safeUrl);
     return { success: true, mode: 'default-browser' };
   } catch (error) {
     return { success: false, reason: error?.message || String(error) };
@@ -393,7 +408,7 @@ function waitForServer(maxWaitMs, intervalMs) {
   const start = Date.now();
   return new Promise(function(resolve) {
     function tryOnce() {
-      const req = http.get('http://localhost:3000', function(res) {
+      const req = http.get(`http://${SERVER_HOST}:3000`, function(res) {
         res.resume();
         console.log('[startup] Express hazir, pencere aciliyor.');
         resolve(true);

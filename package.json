@@ -63,8 +63,6 @@
       "preload.js",
       "src/**/*",
       "renderer/**/*",
-      "config.json",
-      "data/**/*",
       "node_modules/**/*"
     ]
   }

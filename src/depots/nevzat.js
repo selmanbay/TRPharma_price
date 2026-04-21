@@ -36,7 +36,7 @@ class NevzatDepot {
 
     const { hesapKodu, kullaniciAdi, sifre } = this.credentials;
     if (!hesapKodu || !kullaniciAdi || !sifre) {
-      return { success: false, error: 'Hesap kodu, kullanÄ±cÄ± adÄ± ve ÅŸifre gerekli' };
+      return { success: false, error: 'Hesap kodu, kullanici adi ve sifre gerekli' };
     }
 
     try {
@@ -54,7 +54,7 @@ class NevzatDepot {
       const evMatch = html.match(/name="__EVENTVALIDATION"[^>]*value="([^"]*)"/);
 
       if (!vsMatch) {
-        return { success: false, error: 'Login sayfasÄ± parse edilemedi' };
+        return { success: false, error: 'Login sayfasi parse edilemedi' };
       }
 
       const formParams = {
@@ -63,7 +63,7 @@ class NevzatDepot {
         txtEczaneKodu: hesapKodu,
         txtKullaniciAdi: kullaniciAdi,
         txtSifre: sifre,
-        btnGiris: 'GiriÅŸ',
+        btnGiris: 'Giriş',
       };
       if (evMatch) formParams.__EVENTVALIDATION = evMatch[1];
 
@@ -85,13 +85,13 @@ class NevzatDepot {
       const loginCookies = this._extractCookies(loginRes.headers['set-cookie']);
 
       if (!loginCookies || !loginCookies.includes('BoyutAuth')) {
-        return { success: false, error: 'GiriÅŸ baÅŸarÄ±sÄ±z â€” kullanÄ±cÄ± adÄ± veya ÅŸifre hatalÄ± olabilir' };
+        return { success: false, error: 'Giris basarisiz - kullanici adi veya sifre hatali olabilir' };
       }
 
       this.cookies = sessionCookies + '; ' + loginCookies;
       return { success: true };
     } catch (err) {
-      return { success: false, error: `Login hatasÄ±: ${err.message}` };
+      return { success: false, error: `Login hatasi: ${err.message}` };
     }
   }
 
@@ -419,7 +419,7 @@ class NevzatDepot {
   _parseResults(data) {
     const urunler = data.obj?.urunler || [];
     if (process.env.ECZANE_DEBUG === '1' && urunler.length > 0) {
-      console.log("NEVZAT Ä°LK ÃœRÃœN TÃœM ALANLAR:", JSON.stringify(urunler[0], null, 2));
+      console.log("NEVZAT ILK URUN TUM ALANLAR:", JSON.stringify(urunler[0], null, 2));
     }
     const stokGosterilsin = data.obj?.stokGosterilsin ?? false;
     return {
@@ -442,4 +442,5 @@ class NevzatDepot {
 }
 
 module.exports = NevzatDepot;
+
 
