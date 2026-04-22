@@ -58,6 +58,23 @@ function isBarcodeQuery(value) {
   return /^\d{13,}$/.test(String(value || '').trim());
 }
 
+/**
+ * Urun kimligi (plan / arama eslemesi) icin barkod kanonik formu.
+ * Rakam disini kirp; 13+ hane varsa son 13 haneyi EAN-13 (869...) odakli alir.
+ */
+function normalizeProductBarcode(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return raw;
+  if (digits.length >= 13) {
+    const tail = digits.slice(-13);
+    if (tail.startsWith('869')) return tail;
+    return tail;
+  }
+  return digits;
+}
+
 // ── Isin Adi Normalize ─────────────────────────────────────────────────────────
 
 /**
@@ -76,6 +93,33 @@ function normalizeDrugName(name) {
   return n;
 }
 
+/**
+ * UTF-8 metnin latin1/cozulmemis okunmasindan kaynakli mojibake sorunlarini duzeltir.
+ * Ornek: "MÃ¼steri" -> "Müşteri"
+ */
+function fixMojibakeText(value) {
+  if (value == null) return '';
+  const raw = String(value);
+  if (!/[ÃÄÅÂâ]/.test(raw)) return raw;
+  const replacements = [
+    ['Ä±', 'ı'], ['Ä°', 'İ'],
+    ['Ã¼', 'ü'], ['Ãœ', 'Ü'],
+    ['Ã¶', 'ö'], ['Ã–', 'Ö'],
+    ['Ã§', 'ç'], ['Ã‡', 'Ç'],
+    ['ÅŸ', 'ş'], ['Åž', 'Ş'],
+    ['ÄŸ', 'ğ'], ['Äž', 'Ğ'],
+    ['â€“', '-'], ['â€”', '-'],
+    ['â€˜', "'"], ['â€™', "'"],
+    ['â€œ', '"'], ['â€\u009d', '"'],
+    ['Â', ''],
+  ];
+  let next = raw;
+  replacements.forEach(([from, to]) => {
+    next = next.split(from).join(to);
+  });
+  return next;
+}
+
 // ── Slug ───────────────────────────────────────────────────────────────────────
 
 function slugifyName(value) {
@@ -92,6 +136,10 @@ function normalizeImageUrl(url, baseUrl) {
   if (!url) return '';
   const raw = String(url).trim();
   if (!raw) return '';
+  // Nevzat göreli görsel yolu (current-modular / depot-manager ile aynı semantik)
+  if (raw.startsWith('/Resim')) {
+    return 'https://www.nevzatecza.com.tr' + raw;
+  }
   if (raw.startsWith('//')) return 'https:' + raw;
   if (/^https?:\/\//i.test(raw)) return raw;
   if (baseUrl) {
@@ -118,7 +166,8 @@ function getImageFallbackSvg(size) {
 // ── Para Formati ───────────────────────────────────────────────────────────────
 
 function formatCurrency(value) {
-  return 'TL ' + Number(value || 0).toFixed(2).replace('.', ',');
+  const amount = Number(value || 0);
+  return `${amount.toFixed(2).replace('.', ',')} ₺`;
 }
 
 // ── MF (Mal Fazlasi) Parser ────────────────────────────────────────────────────

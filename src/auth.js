@@ -13,6 +13,7 @@ const crypto    = require('crypto');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
 const { getDataFilePath } = require('./config-store');
+const { activateAccount } = require('./account-store');
 
 const AUTH_FILE   = () => getDataFilePath('auth.json');
 const SECRET_FILE = () => getDataFilePath('.secret');
@@ -133,6 +134,11 @@ async function setupUser({ displayName, password }) {
     userId:        crypto.randomUUID(),
   };
   saveAuth(auth);
+  activateAccount({
+    userId: auth.userId,
+    displayName: auth.displayName,
+    role: auth.role,
+  });
   return auth;
 }
 
@@ -163,6 +169,7 @@ async function loginUser(password) {
   // lastLoginAt güncelle
   auth.lastLoginAt = new Date().toISOString();
   saveAuth(auth);
+  activateAccount(user);
 
   return { token, user };
 }

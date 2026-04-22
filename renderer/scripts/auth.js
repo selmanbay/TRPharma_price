@@ -71,6 +71,30 @@ function clearSession() {
  */
 const AUTH_FETCH_TIMEOUT_MS = 15000;
 
+function createAuthFetchSignal(externalSignal) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('timeout')), AUTH_FETCH_TIMEOUT_MS);
+  let removeExternalAbort = null;
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      const onAbort = () => controller.abort(externalSignal.reason);
+      externalSignal.addEventListener('abort', onAbort, { once: true });
+      removeExternalAbort = () => externalSignal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      clearTimeout(timer);
+      if (removeExternalAbort) removeExternalAbort();
+    },
+  };
+}
+
 function authFetch(url, options = {}) {
   const token = getToken();
   const headers = { ...(options.headers || {}) };
@@ -83,16 +107,16 @@ function authFetch(url, options = {}) {
   }
 
   // Caller'ın kendi signal'i varsa onu kullan; yoksa timeout oluştur
-  if (options.signal) {
-    return fetch(url, { ...options, headers });
-  }
+  const signalState = createAuthFetchSignal(options.signal);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
-
-  return fetch(url, { ...options, headers, signal: controller.signal })
+  return fetch(url, { ...options, headers, signal: signalState.signal })
     .catch((err) => {
       if (err.name === 'AbortError') {
+        if (options.signal?.aborted) {
+          const abortErr = new Error('Istek iptal edildi (' + url + ')');
+          abortErr.type = 'abort';
+          throw abortErr;
+        }
         const timeoutErr = new Error('Istek zaman asimina ugradi (' + url + ')');
         timeoutErr.type = 'timeout';
         throw timeoutErr;
@@ -100,7 +124,7 @@ function authFetch(url, options = {}) {
       err.type = err.type || 'network';
       throw err;
     })
-    .finally(() => clearTimeout(timer));
+    .finally(() => signalState.cleanup());
 }
 
 // ── Login / Setup ─────────────────────────────────────────────────────────────

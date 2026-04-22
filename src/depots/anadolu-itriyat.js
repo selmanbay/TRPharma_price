@@ -199,12 +199,20 @@ class AnadoluItriyatDepot {
       results: items.map(item => {
         // Price strings contain HTML: "2.126,42&nbsp;<i class=\"fa fa-try\"...>"
         const rawPrice = item.PriceNetWithVatStr || item.Price2Str || item.Price || '0';
+        const rawPsf = item.Price2Str || item.Price || '0';
         let fiyatNum = 0;
+        let psfFiyatNum = 0;
         if (typeof rawPrice === 'number') {
           fiyatNum = rawPrice;
         } else {
           const str = stripHtml(String(rawPrice)).trim();
           fiyatNum = parseFloat(str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str);
+        }
+        if (typeof rawPsf === 'number') {
+          psfFiyatNum = rawPsf;
+        } else {
+          const str = stripHtml(String(rawPsf)).trim();
+          psfFiyatNum = parseFloat(str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str);
         }
 
         return {
@@ -212,6 +220,7 @@ class AnadoluItriyatDepot {
           ad: item.Name || '',
           fiyat: isNaN(fiyatNum) ? '0' : fiyatNum.toFixed(2).replace('.', ','),
           fiyatNum: isNaN(fiyatNum) ? 0 : fiyatNum,
+          psfFiyatNum: isNaN(psfFiyatNum) ? 0 : psfFiyatNum,
           stok: typeof item.Quantity === 'number' ? item.Quantity : 0,
           stokVar: item.AvailabilityText === 'var' || item.AvailabilityText === 'Var' || (item.Quantity > 0),
           stokGosterilsin: false,

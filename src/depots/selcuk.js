@@ -23,10 +23,11 @@ class SelcukDepot {
     this.name = 'Selçuk Ecza';
     this.credentials = credentials;
     this.cookies = null;
+    this.lastLoginAt = 0;
   }
 
   /**
-   * Cookie string'inden belirli bir cookie deÄŸerini Ã§Ä±karÄ±r
+   * Cookie string'inden belirli bir cookie değerini çıkarır
    */
   _extractCookies(setCookieHeaders) {
     if (!setCookieHeaders) return '';
@@ -35,9 +36,9 @@ class SelcukDepot {
   }
 
   /**
-   * ASP.NET login formu ile giriÅŸ yap.
+   * ASP.NET login formu ile giriş yap.
    * 1) GET /Login.aspx â†’ session cookie + __VIEWSTATE al
-   * 2) POST /Login.aspx â†’ form data gÃ¶nder â†’ auth cookie'leri al
+   * 2) POST /Login.aspx â†’ form data gönder â†’ auth cookie'leri al
    */
   async login() {
     if (this.cookies) return { success: true };
@@ -48,7 +49,7 @@ class SelcukDepot {
     }
 
     try {
-      // 1) Login sayfasÄ±nÄ± al â†’ session cookie + __VIEWSTATE
+      // 1) Login sayfasını al â†’ session cookie + __VIEWSTATE
       const pageRes = await axios.get(`${BASE_URL}/Login.aspx`, {
         headers: { 'user-agent': COMMON_HEADERS['user-agent'] },
         timeout: 6000,
@@ -58,7 +59,7 @@ class SelcukDepot {
       const sessionCookies = this._extractCookies(pageRes.headers['set-cookie']);
       const html = pageRes.data;
 
-      // __VIEWSTATE ve __VIEWSTATEGENERATOR'Ä± HTML'den Ã§ek
+      // __VIEWSTATE ve __VIEWSTATEGENERATOR'ı HTML'den çek
       const vsMatch = html.match(/name="__VIEWSTATE"[^>]*value="([^"]*)"/);
       const vsgMatch = html.match(/name="__VIEWSTATEGENERATOR"[^>]*value="([^"]*)"/);
 
@@ -95,8 +96,9 @@ class SelcukDepot {
         return { success: false, error: 'Giris basarisiz - kullanici adi veya sifre hatali olabilir' };
       }
 
-      // Cookie'leri birleÅŸtir
+      // Cookie'leri birleştir
       this.cookies = sessionCookies + '; ' + loginCookies;
+      this.lastLoginAt = Date.now();
       return { success: true };
     } catch (err) {
       return { success: false, error: `Login hatasi: ${err.message}` };
@@ -108,17 +110,37 @@ class SelcukDepot {
    */
   setCookies(cookieString) {
     this.cookies = cookieString;
+    this.lastLoginAt = cookieString ? Date.now() : 0;
   }
 
   /**
-   * Cookie'leri temizle (re-login iÃ§in)
+   * Cookie'leri temizle (re-login için)
    */
   clearCookies() {
     this.cookies = null;
+    this.lastLoginAt = 0;
+  }
+
+  async ensureSession(options = {}) {
+    const maxAgeMs = Number(options.maxAgeMs) || (20 * 60 * 1000);
+    const forceRefresh = Boolean(options.forceRefresh);
+    const isExpired = !this.lastLoginAt || (Date.now() - this.lastLoginAt > maxAgeMs);
+
+    if (forceRefresh || !this.cookies || isExpired) {
+      this.clearCookies();
+      const loginResult = await this.login();
+      return {
+        success: !!loginResult?.success,
+        refreshed: true,
+        error: loginResult?.error || null,
+      };
+    }
+
+    return { success: true, refreshed: false };
   }
 
   /**
-   * Ä°laÃ§ arama â€” barkod veya isim ile
+   * İlaç arama — barkod veya isim ile
    */
   async search(query) {
     const parsed = await this._searchProducts(query);
@@ -356,7 +378,7 @@ class SelcukDepot {
   async _fetchMFAndReturn(resultsArray) {
       const topItems = resultsArray.slice(0, 10);
 
-      // AÅAMA 1: GetIlacDetay â€” MF verisi + satisSekli al
+      // AÅAMA 1: GetIlacDetay — MF verisi + satisSekli al
       const detailPromises = topItems.map(item => {
          return this.getProductDetail(item.kodu, item.ilacTip).catch(e => null);
       });
@@ -368,6 +390,11 @@ class SelcukDepot {
             if (d.barkod) topItems[i].barkod = d.barkod;
             topItems[i]._satisSekli = d.kampanyalar?.[0]?.satisSekli || 'A6';
             topItems[i].etiketFiyat = d.kampanyalar?.[0]?.etiketFiyati || topItems[i].etiketFiyat || topItems[i].fiyat;
+            const rawPsf = d.kampanyalar?.[0]?.etiketFiyati || '';
+            const psfNum = parseFloat(String(rawPsf).replace(/\./g, '').replace(',', '.'));
+            if (!Number.isNaN(psfNum) && psfNum > 0) {
+              topItems[i].psfFiyatNum = psfNum;
+            }
             
             if (d.kampanyalar && d.kampanyalar.length > 0) {
                let mfs = [];
@@ -388,8 +415,8 @@ class SelcukDepot {
          }
       });
 
-      // AÅAMA 2: IlacFiyatHesapla â€” arama ekraninda tekli baz fiyat al
-      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELCUK] Asama 2: ${topItems.length} Ã¼rÃ¼n iÃ§in fiyat hesaplama baÅŸlÄ±yor...`);
+      // AÅAMA 2: IlacFiyatHesapla — arama ekraninda tekli baz fiyat al
+      if (process.env.ECZANE_DEBUG === '1') console.log(`[SELCUK] Asama 2: ${topItems.length} ürün için fiyat hesaplama başlıyor...`);
       const pricePromises = topItems.map((item, i) => {
         const detail = details[i];
         const satisSekli = detail?.kampanyalar?.[0]?.satisSekli || 'A6';
@@ -400,7 +427,7 @@ class SelcukDepot {
       });
       const prices = await Promise.all(pricePromises);
 
-      // Net Tutar ile fiyat gÃ¼ncelle
+      // Net Tutar ile fiyat güncelle
       prices.forEach((p, i) => {
         if (p && Number(p.totalCost) > 0) {
           const unitGrossPrice = Number(p.totalCost || 0);
@@ -429,7 +456,7 @@ class SelcukDepot {
         fiyatNum: parseFloat(u.fiyat.replace('.', '').replace(',', '.')),
         stok: u.stok,
         // stokDurumu: 1 = stokta var, 0 = stokta yok
-        // stok sayÄ±sÄ± her zaman gÃ¼venilir deÄŸil (stokGosterilsin: false olabilir)
+        // stok sayısı her zaman güvenilir değil (stokGosterilsin: false olabilir)
         stokVar: u.stokDurumu === 1,
         stokGosterilsin,
         ilacTip: u.ILACTIP,
@@ -438,7 +465,7 @@ class SelcukDepot {
       })),
     };
   }
-  // Ä°laÃ§ detay sayfasÄ±ndan barkod dahil bilgi getir
+  // İlaç detay sayfasından barkod dahil bilgi getir
   async getProductDetail(kod, ilacTip) {
     if (!this.cookies) return null;
     try {

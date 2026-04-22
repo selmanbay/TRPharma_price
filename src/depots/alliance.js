@@ -57,6 +57,7 @@ class AllianceDepot {
     this.name = 'Alliance Healthcare';
     this.credentials = credentials;
     this.cookies = null;
+    this.lastLoginAt = 0;
   }
 
   _extractCookies(setCookieHeaders) {
@@ -114,6 +115,7 @@ class AllianceDepot {
       const authCookies = this._extractCookies(postRes.headers['set-cookie']);
       this.cookies = cookie + (authCookies ? '; ' + authCookies : '');
       this.token = token || '_none_';
+      this.lastLoginAt = Date.now();
       return { success: true };
     } catch (err) {
       return { success: false, error: `Login hatasi: ${err.message}` };
@@ -122,10 +124,31 @@ class AllianceDepot {
 
   setCookies(cookieString) {
     this.cookies = cookieString;
+    this.lastLoginAt = cookieString ? Date.now() : 0;
   }
 
   clearCookies() {
     this.cookies = null;
+    this.token = null;
+    this.lastLoginAt = 0;
+  }
+
+  async ensureSession(options = {}) {
+    const maxAgeMs = Number(options.maxAgeMs) || (20 * 60 * 1000);
+    const forceRefresh = Boolean(options.forceRefresh);
+    const isExpired = !this.lastLoginAt || (Date.now() - this.lastLoginAt > maxAgeMs);
+
+    if (forceRefresh || !this.cookies || isExpired) {
+      this.clearCookies();
+      const loginResult = await this.login();
+      return {
+        success: !!loginResult?.success,
+        refreshed: true,
+        error: loginResult?.error || null,
+      };
+    }
+
+    return { success: true, refreshed: false };
   }
 
   _buildBody(query) {
@@ -397,7 +420,7 @@ class AllianceDepot {
   }
 
   /**
-   * Arama sonuÃ§larinda tekli baz fiyatlari hesapla.
+   * Arama sonuçlarinda tekli baz fiyatlari hesapla.
    */
   async _fetchPricesAndReturn(parsedResult) {
     const items = parsedResult.results;
@@ -504,14 +527,22 @@ class AllianceDepot {
       error: null,
       results: items.map(item => {
         const priceTag = item.PriceTag || {};
-        // User requested "bana geliÅŸi" (purchasing price + VAT included)
+        // User requested "bana gelişi" (purchasing price + VAT included)
         const rawFiyat = priceTag.PurchasingPrice || priceTag.SalesPrice || priceTag.ListPrice || item.Price || 0;
+        const rawPsf = priceTag.ListPrice || item.ListPrice || 0;
         let fiyatNum = 0;
+        let psfFiyatNum = 0;
         if (typeof rawFiyat === 'number') {
           fiyatNum = rawFiyat;
         } else {
           const str = String(rawFiyat);
           fiyatNum = parseFloat(str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str);
+        }
+        if (typeof rawPsf === 'number') {
+          psfFiyatNum = rawPsf;
+        } else {
+          const str = String(rawPsf || '');
+          psfFiyatNum = parseFloat(str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str);
         }
 
         return {
@@ -519,6 +550,7 @@ class AllianceDepot {
           ad: item.Name || '',
           fiyat: isNaN(fiyatNum) ? '0' : fiyatNum.toFixed(2).replace('.', ','),
           fiyatNum: isNaN(fiyatNum) ? 0 : fiyatNum,
+          psfFiyatNum: isNaN(psfFiyatNum) ? 0 : psfFiyatNum,
           stok: item.QA || 0,
           stokVar: true,
           stokGosterilsin: false,

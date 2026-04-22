@@ -10,12 +10,24 @@ const AllianceDepot = require('./depots/alliance');
 const SentezDepot = require('./depots/sentez');
 const fs = require('fs');
 const { ensureConfigFile, ensureDataFile, getConfigPath, getDataFilePath } = require('./config-store');
-const { isSetupComplete, setupUser, loginUser } = require('./auth');
+const { isSetupComplete, setupUser, loginUser, loadAuth } = require('./auth');
 const { requireAuth, requireAdmin } = require('./auth-middleware');
+const {
+  activateAccount,
+  listAccounts,
+  getActiveAccount,
+  getDepotConfigForUser,
+  saveDepotConnection,
+  deleteDepotConnection,
+  replaceDepotConfigForUser,
+} = require('./account-store');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
+const testSessionStore = new Map();
+const clientLogStore = new Map();
+let activeTestSessionId = null;
 
 app.disable('x-powered-by');
 app.use((req, res, next) => {
@@ -39,13 +51,15 @@ const manager = new DepotManager();
 const searchEngine = new SearchEngine();
 
 const CONFIG_PATH = getConfigPath();
+const DEMO_PANEL_PATH = getDataFilePath('demo-panel.json');
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX_ATTEMPTS = 8;
 const authRateLimitStore = new Map();
+const PASSWORD_MASK = '********';
 
-// Config dosyasÄ± yolu
+// Config dosyası yolu
 
-// Depot sÄ±nÄ±flarÄ± haritasÄ±
+// Depot sınıfları haritası
 const DEPOT_CLASSES = {
   selcuk: { cls: SelcukDepot, name: 'Selçuk Ecza', authType: 'cookie', url: 'https://webdepo.selcukecza.com.tr/Siparis/hizlisiparis.aspx' },
   nevzat: { cls: NevzatDepot, name: 'Nevzat Ecza', authType: 'cookie', url: 'http://webdepo.nevzatecza.com.tr/Siparis/hizlisiparis.aspx' },
@@ -55,21 +69,30 @@ const DEPOT_CLASSES = {
   sentez: { cls: SentezDepot, name: 'Sentez B2B', authType: 'cookie', url: 'https://www.sentezb2b.com/tr-TR/Site/Liste?tip=Arama&arama={query}&s=a' },
 };
 
-// Config yÃ¼kle
-function loadConfig() {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-    }
-  } catch (e) {
-    console.error('Config okuma hatasi:', e.message);
+function getCurrentUserId() {
+  const auth = loadAuth();
+  if (auth?.setupComplete && auth.userId) {
+    activateAccount({
+      userId: auth.userId,
+      displayName: auth.displayName || 'Eczane',
+      role: auth.role || 'admin',
+    });
+    return auth.userId;
   }
-  return { depots: {} };
+  return getActiveAccount()?.user?.userId || null;
+}
+
+// Config yükle
+function loadConfig() {
+  const userId = getCurrentUserId();
+  return { depots: userId ? getDepotConfigForUser(userId) : {} };
 }
 
 // Config kaydet
 function saveConfig(config) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  const userId = getCurrentUserId();
+  if (!userId) return;
+  replaceDepotConfigForUser(userId, config?.depots || {});
 }
 
 function getAuthRateLimitKey(req) {
@@ -89,7 +112,8 @@ function getRateLimitState(req) {
 }
 
 function isAuthRateLimited(req) {
-  return getRateLimitState(req).count >= AUTH_RATE_LIMIT_MAX_ATTEMPTS;
+  const state = getRateLimitState(req);
+  return state.count >= AUTH_RATE_LIMIT_MAX_ATTEMPTS;
 }
 
 function recordAuthFailure(req) {
@@ -100,6 +124,60 @@ function recordAuthFailure(req) {
 
 function clearAuthFailures(req) {
   authRateLimitStore.delete(getAuthRateLimitKey(req));
+}
+
+function isSecretCredentialField(fieldName) {
+  const key = String(fieldName || '').toLowerCase();
+  return key === 'sifre' || key === 'password' || key === 'parola';
+}
+
+function applyCredentialMask(credentials = {}) {
+  const masked = {};
+  for (const [key, value] of Object.entries(credentials || {})) {
+    if (isSecretCredentialField(key)) {
+      masked[key] = value ? PASSWORD_MASK : '';
+    } else {
+      masked[key] = value;
+    }
+  }
+  return masked;
+}
+
+function mergeCredentialInput(savedCreds = {}, incomingCreds = {}) {
+  const merged = { ...savedCreds };
+  for (const [key, value] of Object.entries(incomingCreds || {})) {
+    const nextValue = String(value ?? '');
+    if (isSecretCredentialField(key) && nextValue === PASSWORD_MASK) {
+      continue;
+    }
+    if (!nextValue.trim() && savedCreds[key]) {
+      merged[key] = savedCreds[key];
+      continue;
+    }
+    merged[key] = value;
+  }
+  return merged;
+}
+
+function ensureDemoPanelFile() {
+  ensureDataFile('demo-panel.json', {
+    selectedRole: 'admin',
+    updatedAt: null,
+  });
+}
+
+function loadDemoPanelState() {
+  ensureDemoPanelFile();
+  try {
+    return JSON.parse(fs.readFileSync(DEMO_PANEL_PATH, 'utf-8'));
+  } catch {
+    return { selectedRole: 'admin', updatedAt: null };
+  }
+}
+
+function saveDemoPanelState(nextState) {
+  ensureDemoPanelFile();
+  fs.writeFileSync(DEMO_PANEL_PATH, JSON.stringify(nextState, null, 2), 'utf-8');
 }
 
 function normalizeDepotName(value) {
@@ -113,10 +191,10 @@ function normalizeDepotName(value) {
 function getDepotAliases(depotId) {
   const depotInfo = DEPOT_CLASSES[depotId];
   const aliasesByDepot = {
-    selcuk: ['Selçuk Ecza', 'Selcuk Ecza', 'SelÃ§uk Ecza', 'SelÃƒÂ§uk Ecza'],
+    selcuk: ['Selçuk Ecza', 'Selcuk Ecza', 'Selçuk Ecza', 'Selçuk Ecza'],
     nevzat: ['Nevzat Ecza'],
     'anadolu-pharma': ['Anadolu Pharma'],
-    'anadolu-itriyat': ['Anadolu İtriyat', 'Anadolu Itriyat', 'Anadolu Ä°triyat', 'Anadolu Ã„Â°triyat'],
+    'anadolu-itriyat': ['Anadolu İtriyat', 'Anadolu Itriyat', 'Anadolu İtriyat', 'Anadolu İtriyat'],
     alliance: ['Alliance Healthcare'],
     sentez: ['Sentez B2B'],
   };
@@ -128,7 +206,33 @@ function findDepotInstance(depotId) {
   return manager.depots.find((depot) => aliases.has(normalizeDepotName(depot.name))) || null;
 }
 
-// BaÅŸlangÄ±Ã§ta config'den depot'larÄ± yÃ¼kle + Search Engine provider kayÄ±tlarÄ±
+function sanitizeTestSession(session) {
+  if (!session) return null;
+  return {
+    sessionId: session.sessionId,
+    scenario: session.scenario || '',
+    note: session.note || '',
+    relayClientLogs: Boolean(session.relayClientLogs),
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+function getClientLogs(sessionId) {
+  return clientLogStore.get(sessionId) || [];
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'eczane-app-v2.2',
+    mode: 'current-modular-baseline',
+    timestamp: Date.now(),
+    activeDepots: manager.depots.length,
+  });
+});
+
+// Başlangıçta config'den depot'ları yükle + Search Engine provider kayıtları
 function initDepots() {
   const config = loadConfig();
   manager.depots = [];
@@ -146,14 +250,14 @@ function initDepots() {
       }
       manager.addDepot(depot);
 
-      // Search Engine: her depo bir provider olarak kayÄ±t olur
+      // Search Engine: her depo bir provider olarak kayıt olur
       searchEngine.register(depotId, {
         name: depotInfo.name,
         searchFn: (query) => depot.search(query),
       });
       searchEngine.activate(depotId);
 
-      console.log(`[+] ${depotInfo.name} yÃ¼klendi`);
+      console.log(`[+] ${depotInfo.name} yüklendi`);
     }
   }
 }
@@ -161,6 +265,36 @@ function initDepots() {
 function getConfiguredDepotById(depotId) {
   if (!DEPOT_CLASSES[depotId]) return null;
   return findDepotInstance(depotId);
+}
+
+function requireUserId(req, res) {
+  const userId = req.user?.userId || getCurrentUserId();
+  if (!userId) {
+    res.status(401).json({ success: false, error: 'Kullanici oturumu bulunamadi' });
+    return null;
+  }
+  return userId;
+}
+
+async function refreshDepotSession(depot, options = {}) {
+  if (!depot) {
+    return { success: false, refreshed: false, error: 'Depot bulunamadi' };
+  }
+
+  if (typeof depot.ensureSession === 'function') {
+    return await depot.ensureSession(options);
+  }
+
+  if (typeof depot.login === 'function') {
+    const result = await depot.login();
+    return {
+      success: !!result?.success,
+      refreshed: true,
+      error: result?.error || null,
+    };
+  }
+
+  return { success: true, refreshed: false };
 }
 
 // â”€â”€ Auth Routes (public) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -175,7 +309,7 @@ app.post('/api/auth/setup', async (req, res) => {
   }
   try {
     const { displayName, password } = req.body;
-    await setupUser({ displayName, password });
+    const auth = await setupUser({ displayName, password });
     const { token, user } = await loginUser(password);
     initDepots();
     clearAuthFailures(req);
@@ -220,7 +354,7 @@ function runAutocompleteSearch(depot, query) {
   return depot.search(query);
 }
 
-// Autocomplete â€” SelÃ§uk'tan isim+barkod, diÄŸer depolardan yedek barkod
+// Autocomplete — Selçuk'tan isim+barkod, diğer depolardan yedek barkod
 app.get('/api/autocomplete', requireAuth, async (req, res) => {
   const { q } = req.query;
   if (!q || q.length < 2) {
@@ -232,7 +366,7 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
   let source = '';
   let allResults = [];
 
-  // Ã–nce hÄ±zlÄ± yol: SelÃ§uk varsa sadece ondan suggestion Ã¼ret
+  // Önce hızlı yol: Selçuk varsa sadece ondan suggestion üret
   if (selcukDepot) {
     try {
       const selcukResult = await runAutocompleteSearch(selcukDepot, q);
@@ -246,7 +380,7 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
     }
   }
 
-  // SelÃ§uk sonuÃ§ vermezse fallback: tÃ¼m aktif depolar
+  // Selçuk sonuç vermezse fallback: tüm aktif depolar
   if (!primaryResults || primaryResults.length === 0) {
     const promises = manager.depots.map(d =>
       runAutocompleteSearch(d, q).catch(() => ({ depot: d.name, results: [] }))
@@ -274,7 +408,7 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
 
   const isSelcuk = normalizeDepotName(source) === normalizeDepotName('Selçuk Ecza');
 
-  // DiÄŸer depolardan gelen barkodlarÄ± yedek olarak topla
+  // Diğer depolardan gelen barkodları yedek olarak topla
   const barcodeMap = {};
   for (const r of allResults) {
     for (const item of (r.results || [])) {
@@ -286,12 +420,12 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
     }
   }
 
-  // Ä°lk 10 sonuÃ§ iÃ§in barkod getir
+  // İlk 10 sonuç için barkod getir
   const top10 = primaryResults.slice(0, 10);
 
   let suggestions;
   if (isSelcuk && selcukDepot && typeof selcukDepot.getProductDetail === 'function') {
-    // SelÃ§uk detay API'sinden paralel barkod Ã§ek
+    // Selçuk detay API'sinden paralel barkod çek
     const detailPromises = top10.map(r =>
       selcukDepot.getProductDetail(r.kodu, r.ilacTip).catch(() => null)
     );
@@ -299,7 +433,7 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
 
     suggestions = top10.map((r, i) => {
       let barcode = details[i]?.barkod || null;
-      // SelÃ§uk detaydan gelemediyse diÄŸer depolardan dene
+      // Selçuk detaydan gelemediyse diğer depolardan dene
       if (!barcode) {
         const normAd = (r.ad || '').toUpperCase().replace(/[\s.]+/g, ' ').trim();
         barcode = barcodeMap[normAd] || null;
@@ -313,7 +447,7 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
       return { ad: r.ad, kodu: r.kodu, fiyat: r.fiyat, barcode };
     });
   } else {
-    // SelÃ§uk deÄŸilse, kodu 8 ile baÅŸlÄ±yorsa barkod, yoksa barcodeMap'ten
+    // Selçuk değilse, kodu 8 ile başlıyorsa barkod, yoksa barcodeMap'ten
     suggestions = top10.map(r => {
       const code = String(r.kodu || '').trim();
       let barcode = code.startsWith('8') && code.length >= 13 ? code : null;
@@ -328,7 +462,7 @@ app.get('/api/autocomplete', requireAuth, async (req, res) => {
   res.json({ source, suggestions });
 });
 
-// Barkod ile tÃ¼m depolardan arama (Eski Monolithic Method)
+// Barkod ile tüm depolardan arama (Eski Monolithic Method)
 app.get('/api/search', requireAuth, async (req, res) => {
   const { q } = req.query;
   if (!q) {
@@ -347,12 +481,12 @@ app.get('/api/search', requireAuth, async (req, res) => {
   }
 });
 
-// Tek bir depodan asenkron arama (Yeni HÄ±zlÄ± Method)
+// Tek bir depodan asenkron arama (Yeni Hızlı Method)
 app.get('/api/search-depot', requireAuth, async (req, res) => {
   const { q, depotId } = req.query;
   if (!q || !depotId) return res.status(400).json({ error: 'Sorgu param eksik' });
 
-  // Ä°lgili depot instance'Ä±nÄ± bul
+  // İlgili depot instance'ını bul
   const config = loadConfig();
   let targetDepot = null;
   if (config.depots[depotId]) {
@@ -411,7 +545,7 @@ app.get('/api/search-smart', requireAuth, (req, res) => {
 
   const write = (payload) => {
     if (closed) return;
-    try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* client kapandÄ± */ }
+    try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* client kapandı */ }
   };
 
   searchEngine.search(q, {
@@ -466,27 +600,26 @@ app.post('/api/quote-option', requireAuth, async (req, res) => {
   }
 });
 
-// Depot ayarlarÄ±nÄ± getir (ÅŸifreleri gizle)
+// Depot ayarlarını getir (şifreleri gizle)
 app.get('/api/config', requireAuth, (req, res) => {
   const config = loadConfig();
   const safe = { depots: {}, availableDepots: {} };
 
-  // Mevcut ayarlanmÄ±ÅŸ depolar
+  // Mevcut ayarlanmış depolar
   for (const [key, val] of Object.entries(config.depots)) {
-    // Åifreyi hariÃ§ tut, diÄŸer credential'larÄ± dÃ¶ndÃ¼r
-    const creds = { ...(val.credentials || {}) };
-    delete creds.sifre;
-    delete creds.password;
+    // Åifreyi hariç tut, diğer credential'ları döndür
+    const creds = applyCredentialMask(val.credentials || {});
     safe.depots[key] = {
       enabled: true,
-      hasCredentials: !!val.credentials?.kullaniciAdi,
+      hasCredentials: Object.values(val.credentials || {}).some((entry) => String(entry || '').trim()),
       hasCookies: !!val.cookies,
       hasToken: !!val.token,
       credentials: creds,
+      hasSavedPassword: Boolean(val.credentials?.sifre || val.credentials?.password),
     };
   }
 
-  // TÃ¼m mevcut depolar (ayarlanmamÄ±ÅŸlar dahil)
+  // Tüm mevcut depolar (ayarlanmamışlar dahil)
   for (const [key, info] of Object.entries(DEPOT_CLASSES)) {
     safe.availableDepots[key] = {
       name: info.name,
@@ -498,7 +631,197 @@ app.get('/api/config', requireAuth, (req, res) => {
   res.json(safe);
 });
 
-// Depot ayarlarÄ±nÄ± kaydet
+app.get('/api/demo/panel', requireAdmin, (req, res) => {
+  const demoState = loadDemoPanelState();
+  const activeAccount = getActiveAccount();
+  const accountSummaries = listAccounts().map((account) => ({
+    userId: account?.user?.userId || '',
+    displayName: account?.user?.displayName || 'Eczane',
+    role: account?.user?.role || 'admin',
+    depotCount: Object.keys(account?.depots || {}).length,
+  }));
+
+  res.json({
+    success: true,
+    selectedRole: demoState.selectedRole || 'admin',
+    updatedAt: demoState.updatedAt || null,
+    currentUser: req.user,
+    activeAccount: activeAccount ? {
+      userId: activeAccount.user?.userId || '',
+      displayName: activeAccount.user?.displayName || 'Eczane',
+      role: activeAccount.user?.role || 'admin',
+      depotCount: Object.keys(activeAccount.depots || {}).length,
+    } : null,
+    profiles: [
+      {
+        id: 'admin',
+        label: 'Admin Panel',
+        description: 'Depo baglantilari, tanilar, test arayuzu ve tum ayarlar gorunur.',
+        capabilities: ['Depo yonetimi', 'Test login', 'Tanı loglari', 'Update kontrolu'],
+      },
+      {
+        id: 'staff',
+        label: 'User Panel',
+        description: 'Arama, plan ve gecmis odakli daha sade bir panel demodur.',
+        capabilities: ['Arama', 'Siparis plani', 'Gecmis', 'Sade gorunum'],
+      },
+    ],
+    accounts: accountSummaries,
+  });
+});
+
+app.post('/api/demo/panel', requireAdmin, (req, res) => {
+  const requestedRole = String(req.body?.selectedRole || '').trim();
+  const selectedRole = requestedRole === 'staff' ? 'staff' : 'admin';
+  const nextState = {
+    selectedRole,
+    updatedAt: new Date().toISOString(),
+  };
+  saveDemoPanelState(nextState);
+  res.json({ success: true, ...nextState });
+});
+
+app.post('/api/test/session/start', requireAdmin, (req, res) => {
+  const sessionId = String(req.body?.sessionId || '').trim() || `v22-${Date.now()}`;
+  const existing = testSessionStore.get(sessionId);
+  const next = {
+    sessionId,
+    scenario: String(req.body?.scenario || '').trim(),
+    note: String(req.body?.note || '').trim(),
+    relayClientLogs: req.body?.relayClientLogs !== false,
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  testSessionStore.set(sessionId, next);
+  activeTestSessionId = sessionId;
+  if (!clientLogStore.has(sessionId)) clientLogStore.set(sessionId, []);
+
+  res.json({
+    ok: true,
+    sessionId,
+    session: sanitizeTestSession(next),
+  });
+});
+
+app.get('/api/test/session/current', requireAdmin, (req, res) => {
+  const session = activeTestSessionId ? testSessionStore.get(activeTestSessionId) : null;
+  res.json({
+    ok: true,
+    sessionId: activeTestSessionId,
+    session: sanitizeTestSession(session),
+    logCount: activeTestSessionId ? getClientLogs(activeTestSessionId).length : 0,
+  });
+});
+
+app.post('/api/test/client-log', requireAdmin, (req, res) => {
+  const requestedSessionId = String(req.body?.sessionId || activeTestSessionId || '').trim();
+  if (!requestedSessionId) {
+    res.status(400).json({ ok: false, error: 'sessionId gerekli' });
+    return;
+  }
+
+  if (!testSessionStore.has(requestedSessionId)) {
+    testSessionStore.set(requestedSessionId, {
+      sessionId: requestedSessionId,
+      scenario: '',
+      note: '',
+      relayClientLogs: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  const entry = {
+    id: `${requestedSessionId}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    sessionId: requestedSessionId,
+    source: String(req.body?.source || 'renderer'),
+    type: String(req.body?.type || 'diagnostic'),
+    message: String(req.body?.message || ''),
+    meta: req.body?.meta && typeof req.body.meta === 'object' ? req.body.meta : {},
+    timestamp: Number(req.body?.timestamp) || Date.now(),
+    receivedAt: Date.now(),
+  };
+
+  const logs = getClientLogs(requestedSessionId);
+  logs.unshift(entry);
+  if (logs.length > 500) logs.length = 500;
+  clientLogStore.set(requestedSessionId, logs);
+  activeTestSessionId = requestedSessionId;
+
+  const session = testSessionStore.get(requestedSessionId);
+  if (session) {
+    session.updatedAt = Date.now();
+    testSessionStore.set(requestedSessionId, session);
+  }
+
+  res.json({ ok: true, entry });
+});
+
+app.get('/api/test/client-log', requireAdmin, (req, res) => {
+  const sessionId = String(req.query?.sessionId || activeTestSessionId || '').trim();
+  res.json({
+    ok: true,
+    sessionId,
+    logs: sessionId ? getClientLogs(sessionId) : [],
+  });
+});
+
+app.delete('/api/test/client-log', requireAdmin, (req, res) => {
+  const sessionId = String(req.query?.sessionId || activeTestSessionId || '').trim();
+  if (!sessionId) {
+    res.status(400).json({ ok: false, error: 'sessionId gerekli' });
+    return;
+  }
+
+  clientLogStore.set(sessionId, []);
+  res.json({
+    ok: true,
+    sessionId,
+    cleared: true,
+  });
+});
+
+app.post('/api/depots/keep-alive', requireAdmin, async (req, res) => {
+  const forceRefresh = Boolean(req.body?.forceRefresh);
+  const maxAgeMs = Number(req.body?.maxAgeMs) || (20 * 60 * 1000);
+  const results = {};
+
+  await Promise.all(
+    Object.keys(DEPOT_CLASSES).map(async (depotId) => {
+      const depot = getConfiguredDepotById(depotId);
+      if (!depot) {
+        results[depotId] = { configured: false, success: false, refreshed: false };
+        return;
+      }
+
+      try {
+        const session = await refreshDepotSession(depot, { forceRefresh, maxAgeMs });
+        results[depotId] = {
+          configured: true,
+          success: !!session?.success,
+          refreshed: !!session?.refreshed,
+          error: session?.error || null,
+        };
+      } catch (error) {
+        results[depotId] = {
+          configured: true,
+          success: false,
+          refreshed: false,
+          error: error?.message || 'Keep-alive hatasi',
+        };
+      }
+    })
+  );
+
+  res.json({
+    success: true,
+    results,
+    timestamp: Date.now(),
+  });
+});
+
+// Depot ayarlarını kaydet
 app.post('/api/config/depot', requireAdmin, (req, res) => {
   const { depotId, credentials, cookies, token } = req.body;
 
@@ -506,26 +829,24 @@ app.post('/api/config/depot', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'depotId gerekli' });
   }
 
+  const userId = requireUserId(req, res);
+  if (!userId) return;
   const config = loadConfig();
   if (!config.depots) config.depots = {};
 
-  // Mevcut credentials ile merge et â€” boÅŸ gÃ¶nderilen alanlar eski deÄŸeri korusun
+  // Mevcut credentials ile merge et — boş gönderilen alanlar eski değeri korusun
   const savedCreds = config.depots[depotId]?.credentials || {};
-  const mergedCredentials = { ...savedCreds, ...(credentials || {}) };
-  for (const key of Object.keys(mergedCredentials)) {
-    if (!mergedCredentials[key] && savedCreds[key]) {
-      mergedCredentials[key] = savedCreds[key];
-    }
-  }
+  const mergedCredentials = mergeCredentialInput(savedCreds, credentials || {});
 
-  config.depots[depotId] = {
+  const nextConnection = {
     credentials: mergedCredentials,
     cookies: cookies || config.depots[depotId]?.cookies || null,
     token: token || config.depots[depotId]?.token || null,
     ciSession: config.depots[depotId]?.ciSession || null,
   };
+  config.depots[depotId] = nextConnection;
 
-  saveConfig(config);
+  saveDepotConnection(userId, depotId, nextConnection);
   initDepots();
 
   res.json({ success: true });
@@ -533,24 +854,26 @@ app.post('/api/config/depot', requireAdmin, (req, res) => {
 
 // Depot sil
 app.delete('/api/config/depot/:depotId', requireAdmin, (req, res) => {
-  const config = loadConfig();
-  delete config.depots[req.params.depotId];
-  saveConfig(config);
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+  deleteDepotConnection(userId, req.params.depotId);
   initDepots();
   res.json({ success: true });
 });
 
-// Login test â€” credential'larla login denemesi yap
+// Login test — credential'larla login denemesi yap
 app.post('/api/test-login', requireAdmin, async (req, res) => {
   try {
   const { depotId, credentials } = req.body;
+  const userId = requireUserId(req, res);
+  if (!userId) return;
 
   const depotInfo = DEPOT_CLASSES[depotId];
   if (!depotInfo) {
     return res.status(400).json({ success: false, error: 'Bilinmeyen depot' });
   }
 
-  // Åifre girilmediyse config'deki mevcut ÅŸifreyi kullan
+  // Åifre girilmediyse config'deki mevcut şifreyi kullan
   const config = loadConfig();
   const runtimeDepot = manager.depots.find(d => d.name === depotInfo.name);
   const runtimeCreds = runtimeDepot?.credentials || {};
@@ -558,13 +881,7 @@ app.post('/api/test-login', requireAdmin, async (req, res) => {
     ...runtimeCreds,
     ...(config.depots?.[depotId]?.credentials || {}),
   };
-  const mergedCredentials = { ...savedCreds, ...(credentials || {}) };
-  // BoÅŸ string olan alanlar iÃ§in saved deÄŸeri kullan
-  for (const key of Object.keys(mergedCredentials)) {
-    if (!mergedCredentials[key] && savedCreds[key]) {
-      mergedCredentials[key] = savedCreds[key];
-    }
-  }
+  const mergedCredentials = mergeCredentialInput(savedCreds, credentials || {});
 
   const hasProvidedCredentials = Object.values(credentials || {}).some(value => String(value || '').trim());
   if (!hasProvidedCredentials && runtimeDepot) {
@@ -577,7 +894,7 @@ app.post('/api/test-login', requireAdmin, async (req, res) => {
         token: runtimeDepot.token || config.depots?.[depotId]?.token || null,
         ciSession: runtimeDepot.ciSession || config.depots?.[depotId]?.ciSession || null,
       };
-      saveConfig(config);
+      saveDepotConnection(userId, depotId, config.depots[depotId]);
       initDepots();
     }
     return res.json(runtimeResult);
@@ -601,7 +918,7 @@ app.post('/api/test-login', requireAdmin, async (req, res) => {
       token: depot.token || null,
       ciSession: depot.ciSession || null,
     };
-    saveConfig(config);
+    saveDepotConnection(userId, depotId, config.depots[depotId]);
     initDepots();
   }
 
@@ -611,7 +928,7 @@ app.post('/api/test-login', requireAdmin, async (req, res) => {
   }
 });
 
-// â”€â”€ AlÄ±m GeÃ§miÅŸi â”€â”€
+// â”€â”€ Alım Geçmişi â”€â”€
 const HISTORY_PATH = getDataFilePath('history.json');
 
 function loadHistory() {
@@ -627,20 +944,62 @@ function saveHistory(data) {
   fs.writeFileSync(HISTORY_PATH, JSON.stringify(data, null, 2));
 }
 
+const CLIENT_STATE_PATH = getDataFilePath('client-state.json');
+
+function loadClientStateStore() {
+  try {
+    ensureDataFile('client-state.json', {});
+    if (fs.existsSync(CLIENT_STATE_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(CLIENT_STATE_PATH, 'utf-8'));
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    }
+  } catch (e) {}
+  return {};
+}
+
+function saveClientStateStore(data) {
+  ensureDataFile('client-state.json', {});
+  fs.writeFileSync(CLIENT_STATE_PATH, JSON.stringify(data, null, 2));
+}
+
+app.get('/api/client-state', requireAuth, (req, res) => {
+  const userId = req.user?.userId || getCurrentUserId() || 'local';
+  const store = loadClientStateStore();
+  const entry = store[userId] || {};
+  res.json({
+    orderPlan: Array.isArray(entry.orderPlan) ? entry.orderPlan : [],
+    approvalQueue: Array.isArray(entry.approvalQueue) ? entry.approvalQueue : [],
+  });
+});
+
+app.put('/api/client-state', requireAuth, (req, res) => {
+  const userId = req.user?.userId || getCurrentUserId() || 'local';
+  const store = loadClientStateStore();
+  store[userId] = {
+    orderPlan: Array.isArray(req.body?.orderPlan) ? req.body.orderPlan : [],
+    approvalQueue: Array.isArray(req.body?.approvalQueue) ? req.body.approvalQueue : [],
+    updatedAt: new Date().toISOString(),
+  };
+  saveClientStateStore(store);
+  res.json({ success: true });
+});
+
 app.get('/api/history', requireAuth, (req, res) => {
-  const history = loadHistory();
+  const userId = req.user?.userId || getCurrentUserId() || 'local';
+  const history = loadHistory().filter((entry) => (entry.userId || 'local') === userId);
   const limit = parseInt(req.query.limit) || 100;
   res.json(history.slice(0, limit));
 });
 
 app.post('/api/history', requireAuth, (req, res) => {
   const { ilac, barkod, sonuclar, enUcuz } = req.body;
-  if (!ilac) return res.status(400).json({ error: 'Ä°laÃ§ adÄ± gerekli' });
+  if (!ilac) return res.status(400).json({ error: 'İlaç adı gerekli' });
 
+  const userId = req.user?.userId || getCurrentUserId() || 'local';
   const history = loadHistory();
   const entry = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    userId: 'local',
+    userId,
     tarih: new Date().toISOString(),
     ilac,
     barkod: barkod || null,
@@ -654,8 +1013,9 @@ app.post('/api/history', requireAuth, (req, res) => {
 });
 
 app.delete('/api/history/:id', requireAuth, (req, res) => {
+  const userId = req.user?.userId || getCurrentUserId() || 'local';
   let history = loadHistory();
-  history = history.filter(h => h.id !== req.params.id);
+  history = history.filter(h => !(h.id === req.params.id && (h.userId || 'local') === userId));
   saveHistory(history);
   res.json({ success: true });
 });
@@ -677,9 +1037,9 @@ function migrateHistory() {
     }
     if (changed) saveHistory(history);
     fs.writeFileSync(sentinelPath, new Date().toISOString(), 'utf-8');
-    console.log('[history] Migration tamamlandÄ±: userId alanÄ± eklendi');
+    console.log('[history] Migration tamamlandı: userId alanı eklendi');
   } catch (err) {
-    console.error('[history] Migration hatasÄ±:', err.message);
+    console.error('[history] Migration hatası:', err.message);
   }
 }
 
@@ -690,12 +1050,5 @@ console.log(`[history] Server history: ${HISTORY_PATH}`);
 migrateHistory();
 initDepots();
 app.listen(PORT, HOST, () => {
-  console.log(`\n  Eczane App Ã§alÄ±ÅŸÄ±yor: http://${HOST}:${PORT}\n`);
-  // Otomatik tarayÄ±cÄ±da aÃ§ (sadece ilk baÅŸlatmada)
-  if (process.env.ECZANE_OPEN_BROWSER !== '0') {
-    const { exec } = require('child_process');
-    exec(`start http://${HOST}:${PORT}`);
-  }
+  console.log(`\n  Eczane App calisiyor: http://${HOST}:${PORT}\n`);
 });
-
-

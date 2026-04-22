@@ -71,9 +71,7 @@ async function injectCookiesAndLoad(webview, depotId, url, searchQuery) {
     // Inject cookies via main process (has access to session.fromPartition)
     if (window.electronAPI && window.electronAPI.injectDepotCookies) {
       const result = await window.electronAPI.injectDepotCookies(depotId, url);
-      if (result && result.success && result.injected > 0) {
-        console.log(`[depot-browser] ${result.injected} cookie(s) injected for ${depotId}`);
-      }
+      // cookie injection success — no logging needed in production
     }
   } catch (err) {
     console.error('Cookie injection error:', err);

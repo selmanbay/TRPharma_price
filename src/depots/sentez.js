@@ -198,17 +198,18 @@ class SentezDepot {
 
       // KDV Dahil Net Fiyat tercih et, yoksa Depo Fiyatı, yoksa Perakende
       let fiyatStr = getText(colIdx.netFiyat) || getText(colIdx.depo) || getText(colIdx.perakende) || '0';
-      const perakendeStr = getText(colIdx.perakende).replace(/\s*TL\s*/gi, '').trim();
+      let psfStr = getText(colIdx.perakende) || '0';
       // "111,10 TL" → "111,10"
       fiyatStr = fiyatStr.replace(/\s*TL\s*/gi, '').trim();
+      psfStr = psfStr.replace(/\s*TL\s*/gi, '').trim();
 
       let fiyatNum = 0;
+      let psfFiyatNum = 0;
       if (fiyatStr && fiyatStr !== '0') {
         fiyatNum = parseFloat(fiyatStr.replace(/\./g, '').replace(',', '.'));
       }
-      let psfFiyatNum = 0;
-      if (perakendeStr && perakendeStr !== '0') {
-        psfFiyatNum = parseFloat(perakendeStr.replace(/\./g, '').replace(',', '.'));
+      if (psfStr && psfStr !== '0') {
+        psfFiyatNum = parseFloat(psfStr.replace(/\./g, '').replace(',', '.'));
       }
 
       // Resim
@@ -226,8 +227,7 @@ class SentezDepot {
         ad,
         fiyat: isNaN(fiyatNum) ? '0' : fiyatNum.toFixed(2).replace('.', ','),
         fiyatNum: isNaN(fiyatNum) ? 0 : fiyatNum,
-        psfFiyat: isNaN(psfFiyatNum) || !(psfFiyatNum > 0) ? '' : psfFiyatNum.toFixed(2).replace('.', ','),
-        psfFiyatNum: isNaN(psfFiyatNum) || !(psfFiyatNum > 0) ? 0 : psfFiyatNum,
+        psfFiyatNum: isNaN(psfFiyatNum) ? 0 : psfFiyatNum,
         stok: 0,
         stokVar: true, // Listede görünüyorsa stokta var demek
         stokGosterilsin: false,

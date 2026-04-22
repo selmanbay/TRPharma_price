@@ -2,18 +2,6 @@ const axios = require('axios');
 
 const BASE_URL = 'https://b2b.anadolupharma.com';
 
-function parsePriceValue(rawValue) {
-  if (rawValue == null || rawValue === '') return 0;
-  if (typeof rawValue === 'number') return rawValue;
-  const str = String(rawValue).trim();
-  if (!str) return 0;
-  const normalized = str.includes(',')
-    ? str.replace(/\./g, '').replace(',', '.')
-    : str;
-  const parsed = parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 class AnadoluPharmaDepot {
   constructor(credentials) {
     // credentials: { kullaniciAdi, sifre, cariKod, userID }
@@ -235,16 +223,29 @@ class AnadoluPharmaDepot {
       depot: this.name,
       error: null,
       results: items.map(item => {
-        const fiyatNum = parsePriceValue(item.KdvDahilNetFiyat || item.sfiyat_fiyati || 0);
-        const psfFiyatNum = parsePriceValue(item.PSFFiyat || item.PSFFiyatTRY || 0);
+        const rawFiyat = item.KdvDahilNetFiyat || item.sfiyat_fiyati || 0;
+        const rawPsf = item.PSFFiyat || item.sfiyat_fiyatiorj || 0;
+        let fiyatNum = 0;
+        let psfFiyatNum = 0;
+        if (typeof rawFiyat === 'number') {
+          fiyatNum = rawFiyat;
+        } else {
+          const str = String(rawFiyat);
+          fiyatNum = parseFloat(str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str);
+        }
+        if (typeof rawPsf === 'number') {
+          psfFiyatNum = rawPsf;
+        } else {
+          const str = String(rawPsf);
+          psfFiyatNum = parseFloat(str.includes(',') ? str.replace(/\./g, '').replace(',', '.') : str);
+        }
         
         return {
           kodu: item.sto_kod || '',
           ad: item.sto_isim || '',
           fiyat: isNaN(fiyatNum) ? '0' : fiyatNum.toFixed(2).replace('.', ','),
           fiyatNum: isNaN(fiyatNum) ? 0 : fiyatNum,
-          psfFiyat: psfFiyatNum > 0 ? psfFiyatNum.toFixed(2).replace('.', ',') : '',
-          psfFiyatNum: psfFiyatNum > 0 ? psfFiyatNum : 0,
+          psfFiyatNum: isNaN(psfFiyatNum) ? 0 : psfFiyatNum,
           stok: item.sto_miktar || 0,
           stokVar: typeof item.Stk_Durum !== 'undefined' ? item.Stk_Durum : item.sto_miktar > 0,
           stokGosterilsin: true,

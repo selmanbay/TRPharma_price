@@ -6,6 +6,7 @@ let _configCache = null;
 
 const PROJECT_ROOT_CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 const PROJECT_ROOT_DATA_DIR = path.join(__dirname, '..', 'data');
+const LEGACY_V22_USERDATA_DIR = path.join(process.env.APPDATA || '', 'eczane-app-v2_2');
 
 function getElectronConfigPath() {
   try {
@@ -46,6 +47,7 @@ function ensureDataFile(fileName, fallbackData) {
   const legacyCandidates = [
     path.join(PROJECT_ROOT_DATA_DIR, fileName),
     path.join(process.cwd(), 'data', fileName),
+    path.join(LEGACY_V22_USERDATA_DIR, 'data', fileName),
   ];
 
   for (const candidate of legacyCandidates) {
@@ -64,6 +66,7 @@ function getLegacyConfigCandidates(targetPath) {
   const candidates = [
     PROJECT_ROOT_CONFIG_PATH,
     path.join(process.cwd(), 'config.json'),
+    path.join(LEGACY_V22_USERDATA_DIR, 'config.json'),
   ];
 
   return Array.from(new Set(candidates.filter((candidate) => candidate && candidate !== targetPath)));

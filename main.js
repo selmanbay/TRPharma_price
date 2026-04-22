@@ -1,4 +1,4 @@
-﻿const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, session, dialog, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeImage, session, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -60,12 +60,13 @@ const SERVER_HOST = '127.0.0.1';
 
 const ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'icon.png');
 const TRAY_ICON_PATH = path.join(__dirname, 'renderer', 'assets', 'icons', 'tray-icon.png');
+const isDevMode = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
 // Single instance lock
-const gotTheLock = app.requestSingleInstanceLock();
+const gotTheLock = isDevMode ? true : app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
-} else {
+} else if (!isDevMode) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -90,10 +91,11 @@ function createWindow() {
       webviewTag: true,
       contextIsolation: true,
       nodeIntegration: false,
+      partition: 'persist:eczane-main',
     },
   });
 
-  mainWindow.loadURL(`http://${SERVER_HOST}:3000`);
+  mainWindow.loadURL(`http://${SERVER_HOST}:3000/index.html`);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();

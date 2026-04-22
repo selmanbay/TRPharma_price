@@ -23,6 +23,7 @@ class NevzatDepot {
     this.name = 'Nevzat Ecza';
     this.credentials = credentials;
     this.cookies = null;
+    this.lastLoginAt = 0;
   }
 
   _extractCookies(setCookieHeaders) {
@@ -89,6 +90,7 @@ class NevzatDepot {
       }
 
       this.cookies = sessionCookies + '; ' + loginCookies;
+      this.lastLoginAt = Date.now();
       return { success: true };
     } catch (err) {
       return { success: false, error: `Login hatasi: ${err.message}` };
@@ -97,10 +99,30 @@ class NevzatDepot {
 
   setCookies(cookieString) {
     this.cookies = cookieString;
+    this.lastLoginAt = cookieString ? Date.now() : 0;
   }
 
   clearCookies() {
     this.cookies = null;
+    this.lastLoginAt = 0;
+  }
+
+  async ensureSession(options = {}) {
+    const maxAgeMs = Number(options.maxAgeMs) || (20 * 60 * 1000);
+    const forceRefresh = Boolean(options.forceRefresh);
+    const isExpired = !this.lastLoginAt || (Date.now() - this.lastLoginAt > maxAgeMs);
+
+    if (forceRefresh || !this.cookies || isExpired) {
+      this.clearCookies();
+      const loginResult = await this.login();
+      return {
+        success: !!loginResult?.success,
+        refreshed: true,
+        error: loginResult?.error || null,
+      };
+    }
+
+    return { success: true, refreshed: false };
   }
 
   async search(query) {
@@ -360,7 +382,7 @@ class NevzatDepot {
   async _fetchMFAndReturn(resultsArray) {
       const topItems = resultsArray.slice(0, 10);
 
-      // AÅAMA 1: GetIlacDetay â€” MF verisi + satisSekli al
+      // AÅAMA 1: GetIlacDetay — MF verisi + satisSekli al
       const detailPromises = topItems.map(item => {
          return this.getProductDetail(item.kodu, item.ilacTip).catch(e => null);
       });
@@ -372,6 +394,11 @@ class NevzatDepot {
             if (d.barkod) topItems[i].barkod = d.barkod;
             topItems[i]._satisSekli = d.kampanyalar?.[0]?.satisSekli || 'A6';
             topItems[i].etiketFiyat = d.kampanyalar?.[0]?.etiketFiyati || topItems[i].etiketFiyat || topItems[i].fiyat;
+            const rawPsf = d.kampanyalar?.[0]?.etiketFiyati || '';
+            const psfNum = parseFloat(String(rawPsf).replace(/\./g, '').replace(',', '.'));
+            if (!Number.isNaN(psfNum) && psfNum > 0) {
+              topItems[i].psfFiyatNum = psfNum;
+            }
             
             if (d.kampanyalar && d.kampanyalar.length > 0) {
                let mfs = [];
@@ -392,7 +419,7 @@ class NevzatDepot {
          }
       });
 
-      // AÅAMA 2: IlacFiyatHesapla â€” arama ekraninda tekli baz fiyat al
+      // AÅAMA 2: IlacFiyatHesapla — arama ekraninda tekli baz fiyat al
       const pricePromises = topItems.map((item, i) => {
         const detail = details[i];
         const satisSekli = detail?.kampanyalar?.[0]?.satisSekli || 'A6';
@@ -402,7 +429,7 @@ class NevzatDepot {
       });
       const prices = await Promise.all(pricePromises);
 
-      // Net Tutar ile fiyat gÃ¼ncelle
+      // Net Tutar ile fiyat güncelle
       prices.forEach((p, i) => {
         if (p && p.totalCost > 0) {
           const unitGrossPrice = Number(p.totalCost || 0);
