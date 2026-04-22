@@ -1,0 +1,146 @@
+/* ═══════════════════════════════════════════════════
+   PAGE TRANSITIONS
+   ═══════════════════════════════════════════════════ */
+
+/* Forward navigation (e.g. home → search, home → settings) */
+.page-enter {
+  animation: pageSlideInRight 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.page-exit {
+  animation: pageSlideOutLeft 250ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Back navigation (e.g. search → home, settings → home) */
+.page-enter-back {
+  animation: pageSlideInLeft 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.page-exit-back {
+  animation: pageSlideOutRight 250ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Home-specific: fade in from center */
+.page-enter-home {
+  animation: pageFadeScaleIn 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.page-exit-home {
+  animation: pageFadeScaleOut 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes pageSlideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pageSlideOutLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-40px); }
+}
+
+@keyframes pageSlideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pageSlideOutRight {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(40px); }
+}
+
+@keyframes pageFadeScaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pageFadeScaleOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.97); }
+}
+
+/* ═══════════════════════════════════════════════════
+   HERO ELEMENT ANIMATIONS
+   ═══════════════════════════════════════════════════ */
+.hero-pill-enter    { animation: fadeInDown 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.hero-title-enter   { animation: fadeInUp  350ms cubic-bezier(0.16, 1, 0.3, 1) 50ms forwards; }
+.hero-desc-enter    { animation: fadeInUp  350ms cubic-bezier(0.16, 1, 0.3, 1) 100ms forwards; }
+.hero-search-enter  { animation: fadeInUp  400ms cubic-bezier(0.16, 1, 0.3, 1) 150ms forwards; }
+.hero-cards-enter   { animation: fadeInUp  400ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards; }
+
+.hero-exit {
+  animation: fadeOutUp 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOutUp {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-20px); }
+}
+
+/* ═══════════════════════════════════════════════════
+   SEARCH RESULTS STAGGER
+   ═══════════════════════════════════════════════════ */
+.stagger-enter {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: staggerFadeIn 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes staggerFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Delay classes for staggered rows */
+.stagger-delay-0 { animation-delay: 0ms; }
+.stagger-delay-1 { animation-delay: 40ms; }
+.stagger-delay-2 { animation-delay: 80ms; }
+.stagger-delay-3 { animation-delay: 120ms; }
+.stagger-delay-4 { animation-delay: 160ms; }
+.stagger-delay-5 { animation-delay: 200ms; }
+.stagger-delay-6 { animation-delay: 240ms; }
+.stagger-delay-7 { animation-delay: 280ms; }
+.stagger-delay-8 { animation-delay: 320ms; }
+.stagger-delay-9 { animation-delay: 360ms; }
+
+/* ═══════════════════════════════════════════════════
+   RESULT CARDS ENTRANCE
+   ═══════════════════════════════════════════════════ */
+.result-card-enter {
+  animation: resultSlideIn 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes resultSlideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.result-best-enter {
+  animation: resultBestIn 400ms cubic-bezier(0.16, 1, 0.3, 1) 80ms forwards;
+  opacity: 0;
+}
+
+@keyframes resultBestIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.result-table-enter {
+  animation: resultTableIn 350ms cubic-bezier(0.16, 1, 0.3, 1) 140ms forwards;
+  opacity: 0;
+}
+
+@keyframes resultTableIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

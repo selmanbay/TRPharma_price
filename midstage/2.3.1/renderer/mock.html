@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Eczane V2.3.1 - Modular Workspace</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https: http:; font-src 'self' data: https: http:;">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+  
+  <style>
+    :root {
+      /* Deep & Rich Ink Palette for professional contrast */
+      --ink-50: #f8fafc;
+      --ink-100: #f1f5f9;
+      --ink-200: #e2e8f0;
+      --ink-300: #cbd5e1;
+      --ink-400: #94a3b8;
+      --ink-500: #64748b;
+      --ink-700: #334155;
+      --ink-800: #1e293b;
+      --ink-900: #0f172a;
+
+      /* Professional Red Brand Color */
+      --brand-50: #fef2f2;
+      --brand-100: #fee2e2;
+      --brand-200: #fecaca;
+      --brand-400: #f87171;
+      --brand-500: #dc2626;
+      --brand-600: #b91c1c;
+      --brand-700: #991b1b;
+      
+      --mint-50: #ecfdf5;
+      --mint-500: #10b981;
+      --mint-600: #059669;
+      
+      --amber-50: #fffbeb;
+      --amber-500: #f59e0b;
+      
+      --rose-50: #fff1f2;
+      --rose-500: #f43f5e;
+
+      /* Vibrant Depot Colors (Brand distinct) */
+      --depot-selcuk: #8b5cf6;
+      --depot-nevzat: #06b6d4;
+      --depot-alliance: #10b981;
+      --depot-pharma: #f97316;
+      --depot-sentez: #e11d48;
+      --depot-itriyat: #eab308;
+
+      /* Typography */
+      --font-ui: 'Inter', sans-serif;
+      --font-display: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      /* Radius & Shadows */
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+      --radius-pill: 9999px;
+
+      --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.03);
+      --shadow-2: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
+      --shadow-glow-brand: 0 0 0 3px rgba(220, 38, 38, 0.15);
+      --shadow-sm: var(--shadow-1);
+      --shadow-card: var(--shadow-2);
+      --shadow-hover: var(--shadow-2);
+      --shadow-glass: 0 8px 32px rgba(15, 23, 42, 0.08);
+      --shadow-drawer: -16px 0 48px -12px rgba(15, 23, 42, 0.18);
+
+      --titlebar-h: 36px;
+      --navbar-h: 64px;
+      --dur-instant: 80ms;
+      --dur-fast: 140ms;
+      --dur-base: 200ms;
+      --dur-moderate: 260ms;
+      --dur-slow: 320ms;
+      --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+      --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+      --ease-linear: linear;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: var(--font-ui);
+      background: var(--ink-50);
+      color: var(--ink-900);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; }
+    .font-mono { font-family: var(--font-mono); letter-spacing: -0.02em; }
+    
+    /* Layout */
+    .app-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+    .page { display: none; width: 100%; height: 100%; overflow-y: auto; background: var(--ink-50); }
+    .page.active { display: block; animation: slideUpFade var(--dur-slow) var(--ease-enter) forwards; }
+    
+    @keyframes slideUpFade { 
+      from { opacity: 0; transform: translateY(4px); } 
+      to { opacity: 1; transform: translateY(0); } 
+    }
+
+    /* Top Navigation */
+    .top-nav { 
+      height: var(--navbar-h); 
+      background: rgba(255, 255, 255, 0.85); 
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(226, 232, 240, 0.8); 
+      display: flex; align-items: center; justify-content: space-between; 
+      padding: 0 24px; flex-shrink: 0; z-index: 100;
+    }
+    .nav-left { display: flex; align-items: center; gap: 24px; }
+    .nav-logo { width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(145deg, #ef4444 0%, #dc2626 55%, #b91c1c 100%); display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; box-shadow: 0 2px 8px rgba(185,28,28,0.3), 0 1px 2px rgba(185,28,28,0.18), inset 0 1px 0 rgba(255,255,255,0.2); transition: transform 0.18s ease, box-shadow 0.18s ease; flex-shrink: 0; }
+    .nav-logo:hover { transform: scale(1.06); box-shadow: 0 4px 14px rgba(185,28,28,0.42), 0 2px 4px rgba(185,28,28,0.22), inset 0 1px 0 rgba(255,255,255,0.2); }
+    .pharmacy-logo { width: 100%; height: 100%; }
+    .pharmacy-logo * { vector-effect: non-scaling-stroke; }
+    .nav-search { 
+      width: 320px; padding: 10px 16px 10px 44px; border-radius: var(--radius-pill); 
+      border: 1px solid var(--ink-200); background: var(--ink-100); 
+      font-family: var(--font-ui); font-size: 14px; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard); outline: none;
+    }
+    .nav-search:focus { background: #fff; border-color: var(--brand-500); box-shadow: var(--shadow-glow-brand); width: 320px; }
+    .nav-right { display: flex; align-items: center; gap: 16px; }
+
+    /* Core UI Elements */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--font-ui); font-size: 14px; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer; border: none; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), opacity var(--dur-fast) var(--ease-standard); padding: 10px 16px; outline: none; }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--ink-900); color: #fff; box-shadow: 0 2px 4px rgba(15, 23, 42, 0.2); }
+    .btn-primary:hover { background: #000; box-shadow: var(--shadow-2); transform: none; }
+    .btn-brand { background: var(--brand-500); color: #fff; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.25); }
+    .btn-brand:hover { background: var(--brand-600); box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35); transform: none; }
+    .btn-outline { background: #fff; border: 1px solid var(--ink-200); color: var(--ink-700); }
+    .btn-outline:hover { background: var(--ink-50); border-color: var(--ink-300); color: var(--ink-900); }
+    .btn-ghost { background: transparent; color: var(--ink-700); }
+    .btn-ghost:hover { background: var(--ink-100); color: var(--ink-900); }
+    .btn-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); color: var(--ink-500); background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+    .btn-icon:hover { background: var(--ink-100); color: var(--ink-900); }
+
+    .card { background: #fff; border: 1px solid var(--ink-200); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden; }
+    
+    /* Login Screen */
+    #page-login { display: none; background: #fff; }
+    #page-login.active { display: flex; }
+    .login-container { display: flex; width: 100%; height: 100%; }
+    .login-art { flex: 1; background: linear-gradient(150deg, #0f172a 0%, #1a0a0a 50%, #1c0606 100%); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .login-art::before { content: ''; position: absolute; width: 560px; height: 560px; background: radial-gradient(circle, rgba(220, 38, 38, 0.18) 0%, transparent 70%); top: -80px; right: -80px; border-radius: 50%; }
+    .login-art::after { content: ''; position: absolute; width: 700px; height: 700px; background: radial-gradient(circle, rgba(185, 28, 28, 0.10) 0%, transparent 70%); bottom: -180px; left: -180px; border-radius: 50%; }
+    .login-glass { position: relative; z-index: 10; background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.07); padding: 52px 48px; border-radius: var(--radius-xl); color: white; text-align: center; max-width: 400px; min-height: 340px; display: flex; align-items: center; justify-content: center; }
+    .login-scenes { position: relative; width: 260px; height: 280px; }
+    .login-scene { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; opacity: 0; transform: translateY(10px) scale(0.97); }
+    .login-scene:nth-child(1) { animation: loginScene 16s 0s infinite; }
+    .login-scene:nth-child(2) { animation: loginScene 16s 4s infinite; }
+    .login-scene:nth-child(3) { animation: loginScene 16s 8s infinite; }
+    .login-scene:nth-child(4) { animation: loginScene 16s 12s infinite; }
+    @keyframes loginScene {
+      0%   { opacity: 0; transform: translateY(12px) scale(0.96); }
+      5%   { opacity: 1; transform: translateY(0) scale(1); }
+      20%  { opacity: 1; transform: translateY(0) scale(1); }
+      26%  { opacity: 0; transform: translateY(-10px) scale(0.97); }
+      100% { opacity: 0; transform: translateY(-10px) scale(0.97); }
+    }
+    /* Scene internal animations */
+    @keyframes pillFloat {
+      0%,100% { transform: translateY(0px) rotate(-2deg); }
+      50%     { transform: translateY(-6px) rotate(2deg); }
+    }
+    @keyframes pillPulse {
+      0%,100% { opacity: 0.6; }
+      50%     { opacity: 1; }
+    }
+    @keyframes barFill {
+      0%   { transform: scaleX(0.2); opacity: 0.4; }
+      60%  { transform: scaleX(1); opacity: 1; }
+      80%  { transform: scaleX(1); opacity: 1; }
+      100% { transform: scaleX(0.2); opacity: 0.4; }
+    }
+    @keyframes checkPop {
+      0%,40% { opacity: 0; transform: scale(0.5); }
+      55%    { opacity: 1; transform: scale(1.15); }
+      70%    { transform: scale(1); opacity: 1; }
+      85%,100%{ opacity: 0; transform: scale(0.5); }
+    }
+    @keyframes warehouseDot {
+      0%,100% { opacity: 0.2; transform: scale(0.7); }
+      50%     { opacity: 1; transform: scale(1.2); }
+    }
+    @keyframes carDrive {
+      0%   { transform: translateX(-18px); opacity: 0; }
+      15%  { opacity: 1; transform: translateX(-8px); }
+      70%  { transform: translateX(8px); opacity: 1; }
+      85%  { transform: translateX(18px); opacity: 0; }
+      100% { transform: translateX(18px); opacity: 0; }
+    }
+    @keyframes roadLine {
+      0%   { transform: translateX(-30px); opacity: 0; }
+      20%  { opacity: 0.5; }
+      80%  { opacity: 0.5; }
+      100% { transform: translateX(30px); opacity: 0; }
+    }
+    @keyframes scanLine {
+      0%,100% { transform: translateY(-20px); opacity: 0; }
+      10%     { opacity: 1; }
+      90%     { opacity: 1; }
+      50%     { transform: translateY(20px); }
+    }
+    .login-scene-icon { width: 100px; height: 100px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(220,38,38,0.2), inset 0 1px 0 rgba(255,255,255,0.12); }
+    .login-scene-label { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-top: 4px; }
+    .login-scene-title { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+    .login-scene-desc { font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5; max-width: 220px; }
+    .login-form-area { width: 480px; padding: 64px; display: flex; flex-direction: column; justify-content: center; background: #fff; }
+    .input { width: 100%; font-family: var(--font-ui); font-size: 15px; padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--ink-200); background: var(--ink-50); color: var(--ink-900); outline: none; transition: 0.2s; }
+    .input:focus { background: #fff; border-color: var(--brand-500); box-shadow: 0 0 0 3px var(--brand-50); }
+    .form-group { margin-bottom: 24px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+
+    /* Home Dashboard */
+    .home-wrapper { padding: 48px; max-width: 1400px; margin: 0 auto; width: 100%; }
+    .dashboard-header { margin-bottom: 40px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .metric-group { display: flex; gap: 16px; }
+    .metric-card { background: #fff; padding: 20px 24px; border-radius: var(--radius-lg); border: 1px solid var(--ink-200); box-shadow: var(--shadow-sm); min-width: 160px; position: relative; overflow: hidden; }
+    .metric-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--ink-200); }
+    .metric-card.success::after { background: var(--mint-500); }
+    .metric-val { font-family: var(--font-display); font-size: 36px; font-weight: 700; line-height: 1; color: var(--ink-900); margin-bottom: 8px; }
+    .metric-lbl { font-size: 12px; font-weight: 600; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+    
+    /* Search Layout */
+    .search-layout { display: flex; height: 100%; }
+    .search-sidebar { width: 340px; border-right: 1px solid var(--ink-200); background: var(--ink-50); display: flex; flex-direction: column; }
+    .search-main { flex: 1; background: #fff; overflow-y: auto; position: relative; }
+    
+    /* Variant Forms Grid (Sleek List) */
+    .variant-list { padding: 32px; max-width: 900px; margin: 0 auto; }
+    .variant-item { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border: 1px solid var(--ink-200); border-radius: var(--radius-md); margin-bottom: 12px; cursor: pointer; transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard); background: #fff; }
+    .variant-item:hover { border-color: var(--brand-500); box-shadow: var(--shadow-hover); transform: none; }
+    .variant-name { font-size: 16px; font-weight: 600; color: var(--ink-900); }
+    .variant-price { font-family: var(--font-mono); font-weight: 700; font-size: 18px; color: var(--mint-600); }
+
+    /* Search Detail View */
+    .detail-wrapper { padding: 32px; max-width: 1100px; margin: 0 auto; }
+    
+    .product-hero { background: linear-gradient(180deg, #fff 0%, var(--ink-50) 100%); border: 1px solid var(--ink-200); border-radius: var(--radius-xl); padding: 32px; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; box-shadow: var(--shadow-sm); }
+    .product-hero-info { display: flex; gap: 24px; }
+    .product-hero-icon { width: 72px; height: 72px; background: #fff; border-radius: var(--radius-md); border: 1px solid var(--ink-200); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-sm); color: var(--brand-500); }
+    .product-hero h2 { font-size: 28px; color: var(--ink-900); margin-bottom: 12px; line-height: 1.2; }
+    
+    .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
+    .badge-outline { border: 1px solid var(--ink-200); color: var(--ink-700); background: #fff; }
+    
+    /* Vibrant Depot Labels */
+    .depot-label { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; }
+    .depot-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .depot-label.selcuk .depot-dot { background: var(--depot-selcuk); box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.18); }
+    .depot-label.nevzat .depot-dot { background: var(--depot-nevzat); box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.18); }
+    .depot-label.alliance .depot-dot { background: var(--depot-alliance); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18); }
+    .depot-label.pharma .depot-dot { background: var(--depot-pharma); box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18); }
+    .depot-label.sentez .depot-dot { background: var(--depot-sentez); box-shadow: 0 0 0 2px rgba(225, 29, 72, 0.18); }
+    .depot-label.itriyat .depot-dot { background: var(--depot-itriyat); box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.18); }
+
+    .table-container { background: #fff; border: 1px solid var(--ink-200); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: var(--ink-50); padding: 16px 24px; text-align: left; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--ink-200); }
+    .data-table td { padding: 20px 24px; border-bottom: 1px solid var(--ink-100); vertical-align: middle; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr { transition: background var(--dur-fast) var(--ease-standard); }
+    .data-table tr:hover { background: var(--ink-50); }
+    
+    .row-highlight { background: linear-gradient(90deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%); }
+    .row-highlight td { border-bottom-color: rgba(16, 185, 129, 0.1); }
+    
+    /* Animated Expandable MF Calculator */
+    .mf-calc-wrap { max-height: 0; overflow: hidden; opacity: 0; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); margin-top: 0; }
+    .mf-calc-wrap.open { max-height: 300px; opacity: 1; margin-top: 16px; margin-bottom: 24px; }
+    .mf-calc-inner { background: var(--ink-900); color: white; border-radius: var(--radius-lg); padding: 24px; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15); position: relative; }
+    .mf-input-row { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
+    .mf-huge-input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: var(--radius-md); padding: 0 20px; height: 56px; font-family: var(--font-mono); font-size: 24px; font-weight: 700; color: white; width: 140px; text-align: center; outline: none; }
+    .mf-huge-input:focus { border-color: var(--brand-500); background: rgba(255,255,255,0.15); }
+    .mf-suggestions { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+    .mf-tag { padding: 8px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-pill); cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 8px; }
+    .mf-tag:hover { background: rgba(255,255,255,0.15); }
+    .mf-tag.best { background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.5); color: #34d399; }
+    
+    /* Plan Page & Accordion */
+    .plan-accordion { background: #fff; border: 1px solid var(--ink-200); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 16px; transition: 0.2s; }
+    .plan-accordion:hover { border-color: var(--ink-300); box-shadow: var(--shadow-card); }
+    .plan-acc-head { padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #fff; }
+    .plan-acc-body { border-top: 1px solid var(--ink-100); background: var(--ink-50); padding: 16px 24px; display: none; }
+    .plan-accordion.open .plan-acc-body { display: block; }
+    .plan-accordion.open .plan-acc-head { background: var(--ink-50); }
+
+    /* Drawer (Order Editing) */
+    .drawer-overlay { position: fixed; top: calc(var(--titlebar-h) + var(--navbar-h)); left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.4); z-index: 1000; opacity: 0; pointer-events: none; transition: opacity var(--dur-slow) var(--ease-standard); backdrop-filter: blur(2px); }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+    .drawer { position: fixed; top: calc(var(--titlebar-h) + var(--navbar-h)); right: 0; bottom: 0; width: 480px; background: #fff; box-shadow: var(--shadow-drawer); z-index: 1001; transition: transform var(--dur-slow) var(--ease-enter); display: flex; flex-direction: column; transform: translateX(100%); }
+    .drawer.open { transform: translateX(0); }
+    
+    .drawer-left { position: fixed; top: calc(var(--titlebar-h) + var(--navbar-h)); left: 0; bottom: 0; width: 480px; background: #fff; box-shadow: 10px 0 30px rgba(15, 23, 42, 0.1); z-index: 1001; transition: transform var(--dur-slow) var(--ease-enter); display: flex; flex-direction: column; transform: translateX(-100%); }
+    .drawer-left.open { transform: translateX(0); }
+    
+    .drawer-header { padding: 24px; border-bottom: 1px solid var(--ink-200); display: flex; justify-content: space-between; align-items: flex-start; background: #fff; }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 24px; background: var(--ink-50); }
+    .drawer-footer { padding: 24px; border-top: 1px solid var(--ink-200); background: #fff; display: flex; gap: 12px; }
+
+    /* Bulk Search */
+    .bulk-dropzone { border: 2px dashed var(--ink-300); border-radius: var(--radius-lg); padding: 48px; text-align: center; background: #fff; cursor: pointer; transition: 0.2s; }
+    .bulk-dropzone:hover { border-color: var(--brand-500); background: var(--brand-50); }
+
+    .text-success { color: var(--mint-600); }
+    .text-warning { color: var(--amber-500); }
+    .text-danger { color: var(--rose-500); }
+
+    /* Utilities */
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
+    .mt-4 { margin-top: 16px; } .mb-2 { margin-bottom: 8px; } .mb-4 { margin-bottom: 16px; } .mb-6 { margin-bottom: 24px; }
+  </style>
+  <link rel="stylesheet" href="./mock.css?v=23b">
+  <link rel="stylesheet" href="./styles/detail-hero.css?v=23b">
+</head>
+<body>
+
+  <div class="titlebar" id="titlebar">
+    <div class="titlebar-left">
+      <div class="nav-logo" style="width:24px; height:24px; border-radius:8px;">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <rect x="6.1" y="1.5" width="1.8" height="11" rx="0.9" fill="white"/>
+          <rect x="1.5" y="6.1" width="11" height="1.8" rx="0.9" fill="white"/>
+        </svg>
+      </div>
+    </div>
+    <div class="titlebar-controls">
+      <button class="tb-btn tb-minimize" id="tbMinimize" aria-label="Kucult">
+        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+      <button class="tb-btn tb-maximize" id="tbMaximize" aria-label="Buyut">
+        <svg width="12" height="12" viewBox="0 0 12 12" id="maximizeIcon"><rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+      <button class="tb-btn tb-close" id="tbClose" aria-label="Kapat">
+        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- App Header -->
+  <header class="top-nav">
+    <div class="nav-left">
+      <div class="nav-logo" onclick="switchMock('home')" title="Ana Sayfa">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <!-- artı / cross ilaç sembolü -->
+          <rect x="7.7" y="2" width="2.6" height="14" rx="1.3" fill="white"/>
+          <rect x="2" y="7.7" width="14" height="2.6" rx="1.3" fill="white"/>
+        </svg>
+      </div>
+      
+      <div class="nav-search-shell" style="position:relative; margin-left: 16px;">
+        <span class="material-symbols-outlined nav-search-icon" style="position:absolute; left: 14px; top: 10px; color: var(--ink-400); font-size: 20px;">search</span>
+        <input type="text" class="nav-search" placeholder="İlaç, barkod veya etken madde ara..." onclick="switchMock('search-variants')">
+        <div class="nav-search-shortcut" style="position:absolute; right: 8px; top: 8px; background: #fff; border: 1px solid var(--ink-200); border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600; color: var(--ink-500);">Ctrl K</div>
+      </div>
+    </div>
+    
+    <div class="nav-right">
+      <button class="btn btn-outline" style="border-color: var(--brand-200); color: var(--brand-600);" onclick="switchMock('bulk')">
+        <span class="material-symbols-outlined" style="font-size: 18px;">library_add_check</span>
+        Toplu Arama
+      </button>
+      <button class="btn btn-brand" onclick="switchMock('plan')">
+        <span class="material-symbols-outlined" style="font-size: 18px;">shopping_bag</span>
+        Sipariş Planı (2)
+      </button>
+      <div style="width: 1px; height: 24px; background: var(--ink-200); margin: 0 8px;"></div>
+      <div class="flex items-center gap-2" style="padding: 4px 12px; border-radius: var(--radius-pill); background: var(--mint-50); border: 1px solid rgba(16,185,129,0.2); cursor: pointer;" title="Tüm Depolar Aktif">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--mint-500); box-shadow: 0 0 6px rgba(16,185,129,0.5);"></div>
+        <span style="font-size: 12px; font-weight: 700; color: var(--mint-600);">6/6 Aktif</span>
+      </div>
+      <div style="width: 1px; height: 24px; background: var(--ink-200); margin: 0 8px;"></div>
+      
+      <button class="btn-icon" style="margin-right: -8px;" onclick="switchMock('settings')" title="Ayarlar"><span class="material-symbols-outlined">settings</span></button>
+      
+      <div style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); transition: 0.2s;" class="hover:bg-ink-100" onclick="switchMock('login')">
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--ink-800); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">A</div>
+        <div style="font-weight: 600; font-size: 13px;">Ahenk Eczanesi</div>
+        <span class="material-symbols-outlined" style="font-size: 18px; color: var(--ink-500);">expand_more</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-container">
+
+    <!-- LOGIN PAGE -->
+    <div id="page-login" class="page active">
+      <div class="login-container">
+        <div class="login-art">
+          <div class="login-glass">
+            <div class="login-scenes">
+
+              <!-- Sahne 1: İlaç -->
+              <div class="login-scene">
+                <div class="login-scene-icon">
+                  <svg width="62" height="62" viewBox="0 0 62 62" fill="none" style="overflow:visible">
+                    <!-- Main pill floating -->
+                    <g style="animation: pillFloat 2.4s ease-in-out infinite; transform-origin: 31px 31px;">
+                      <rect x="11" y="26" width="40" height="12" rx="6" fill="rgba(255,255,255,0.13)" stroke="rgba(255,255,255,0.28)" stroke-width="1.5"/>
+                      <rect x="11" y="26" width="20" height="12" rx="6" fill="rgba(220,38,38,0.65)"/>
+                      <line x1="31" y1="26" x2="31" y2="38" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+                    </g>
+                    <!-- Small pill top-left -->
+                    <g style="animation: pillFloat 3s 0.6s ease-in-out infinite; transform-origin: 16px 13px;">
+                      <rect x="10" y="10" width="12" height="6" rx="3" fill="rgba(220,38,38,0.35)" stroke="rgba(220,38,38,0.5)" stroke-width="1"/>
+                      <rect x="10" y="10" width="6" height="6" rx="3" fill="rgba(220,38,38,0.55)"/>
+                    </g>
+                    <!-- Small pill bottom-right -->
+                    <g style="animation: pillFloat 2.8s 1.2s ease-in-out infinite; transform-origin: 48px 50px;">
+                      <rect x="42" y="47" width="12" height="6" rx="3" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+                      <rect x="42" y="47" width="6" height="6" rx="3" fill="rgba(255,255,255,0.25)"/>
+                    </g>
+                    <!-- Pulse rings -->
+                    <circle cx="31" cy="32" r="18" stroke="rgba(220,38,38,0.15)" stroke-width="1" fill="none" style="animation: pillPulse 2s ease-in-out infinite;"/>
+                    <circle cx="31" cy="32" r="24" stroke="rgba(220,38,38,0.08)" stroke-width="1" fill="none" style="animation: pillPulse 2s 0.4s ease-in-out infinite;"/>
+                  </svg>
+                </div>
+                <span class="login-scene-label">Adım 1</span>
+                <span class="login-scene-title">İlaç Ara</span>
+                <span class="login-scene-desc">Barkod veya isimle saniyeler içinde tüm depolardan fiyat çek</span>
+              </div>
+
+              <!-- Sahne 2: Seçim / Karşılaştırma -->
+              <div class="login-scene">
+                <div class="login-scene-icon">
+                  <svg width="62" height="62" viewBox="0 0 62 62" fill="none" style="overflow:visible">
+                    <!-- Row 1: best (highlighted, fills full) -->
+                    <rect x="8" y="12" width="28" height="7" rx="3.5" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                    <rect x="8" y="12" width="28" height="7" rx="3.5" fill="rgba(220,38,38,0.55)" style="transform-origin: 8px 15.5px; animation: barFill 3s 0.1s ease-in-out infinite;"/>
+                    <!-- Row 2 -->
+                    <rect x="8" y="23" width="28" height="7" rx="3.5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+                    <rect x="8" y="23" width="19" height="7" rx="3.5" fill="rgba(255,255,255,0.18)" style="transform-origin: 8px 26.5px; animation: barFill 3s 0.5s ease-in-out infinite;"/>
+                    <!-- Row 3 -->
+                    <rect x="8" y="34" width="28" height="7" rx="3.5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+                    <rect x="8" y="34" width="22" height="7" rx="3.5" fill="rgba(255,255,255,0.15)" style="transform-origin: 8px 37.5px; animation: barFill 3s 0.9s ease-in-out infinite;"/>
+                    <!-- Row 4 -->
+                    <rect x="8" y="45" width="28" height="7" rx="3.5" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+                    <rect x="8" y="45" width="14" height="7" rx="3.5" fill="rgba(255,255,255,0.12)" style="transform-origin: 8px 48.5px; animation: barFill 3s 1.3s ease-in-out infinite;"/>
+                    <!-- Check badge -->
+                    <circle cx="48" cy="15.5" r="8" fill="rgba(220,38,38,0.2)" stroke="rgba(220,38,38,0.6)" stroke-width="1.5" style="animation: checkPop 3s 0.1s ease-in-out infinite;"/>
+                    <polyline points="44,15.5 47,18.5 52,12.5" stroke="rgba(220,38,38,0.95)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" style="animation: checkPop 3s 0.1s ease-in-out infinite;"/>
+                  </svg>
+                </div>
+                <span class="login-scene-label">Adım 2</span>
+                <span class="login-scene-title">En İyiyi Seç</span>
+                <span class="login-scene-desc">Tüm depolar karşılaştırılır, en uygun fiyat öne çıkar</span>
+              </div>
+
+              <!-- Sahne 3: Depo -->
+              <div class="login-scene">
+                <div class="login-scene-icon">
+                  <svg width="62" height="62" viewBox="0 0 62 62" fill="none" style="overflow:visible">
+                    <!-- Warehouse roof -->
+                    <path d="M7 32 L31 14 L55 32" stroke="rgba(255,255,255,0.3)" stroke-width="1.8" stroke-linejoin="round" fill="rgba(255,255,255,0.05)"/>
+                    <!-- Building -->
+                    <rect x="9" y="32" width="44" height="20" rx="2" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+                    <!-- Door (red) -->
+                    <rect x="24" y="38" width="14" height="14" rx="2" fill="rgba(220,38,38,0.45)" stroke="rgba(220,38,38,0.35)" stroke-width="1"/>
+                    <!-- Windows -->
+                    <rect x="12" y="36" width="8" height="7" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                    <rect x="42" y="36" width="8" height="7" rx="1" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                    <!-- Animated activity dots (pulsing lights in windows) -->
+                    <circle cx="16" cy="39.5" r="2" fill="rgba(220,38,38,0.8)" style="animation: warehouseDot 1.8s 0s ease-in-out infinite;"/>
+                    <circle cx="46" cy="39.5" r="2" fill="rgba(220,38,38,0.8)" style="animation: warehouseDot 1.8s 0.6s ease-in-out infinite;"/>
+                    <!-- Signal waves from roof top -->
+                    <circle cx="31" cy="14" r="5" stroke="rgba(220,38,38,0.3)" stroke-width="1" fill="none" style="animation: warehouseDot 2.2s 0s ease-in-out infinite;"/>
+                    <circle cx="31" cy="14" r="9" stroke="rgba(220,38,38,0.15)" stroke-width="1" fill="none" style="animation: warehouseDot 2.2s 0.4s ease-in-out infinite;"/>
+                  </svg>
+                </div>
+                <span class="login-scene-label">Adım 3</span>
+                <span class="login-scene-title">Depoyu Bul</span>
+                <span class="login-scene-desc">6 depoya aynı anda bağlan, stok ve kampanyaları gör</span>
+              </div>
+
+              <!-- Sahne 4: Sipariş / Araç -->
+              <div class="login-scene">
+                <div class="login-scene-icon">
+                  <svg width="62" height="62" viewBox="0 0 62 62" fill="none" style="overflow:visible">
+                    <!-- Road surface -->
+                    <rect x="4" y="42" width="54" height="8" rx="2" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+                    <!-- Road dashes (animated) -->
+                    <g style="animation: roadLine 1.5s linear infinite;">
+                      <rect x="12" y="45.5" width="8" height="1.5" rx="0.75" fill="rgba(255,255,255,0.25)"/>
+                      <rect x="27" y="45.5" width="8" height="1.5" rx="0.75" fill="rgba(255,255,255,0.25)"/>
+                      <rect x="42" y="45.5" width="8" height="1.5" rx="0.75" fill="rgba(255,255,255,0.25)"/>
+                    </g>
+                    <!-- Car body (driving) -->
+                    <g style="animation: carDrive 2.8s ease-in-out infinite; transform-origin: 31px 38px;">
+                      <rect x="17" y="34" width="28" height="10" rx="3" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.28)" stroke-width="1.5"/>
+                      <path d="M21 34 L24 28 L38 28 L41 34 Z" fill="rgba(220,38,38,0.5)" stroke="rgba(220,38,38,0.7)" stroke-width="1.2" stroke-linejoin="round"/>
+                      <!-- Windows -->
+                      <rect x="25" y="29" width="5" height="5" rx="1" fill="rgba(255,255,255,0.2)"/>
+                      <rect x="32" y="29" width="5" height="5" rx="1" fill="rgba(255,255,255,0.2)"/>
+                      <!-- Wheels -->
+                      <circle cx="24" cy="44" r="3.5" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>
+                      <circle cx="24" cy="44" r="1.2" fill="rgba(255,255,255,0.4)"/>
+                      <circle cx="38" cy="44" r="3.5" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>
+                      <circle cx="38" cy="44" r="1.2" fill="rgba(255,255,255,0.4)"/>
+                      <!-- Headlight glow -->
+                      <circle cx="41" cy="37" r="2" fill="rgba(255,230,100,0.4)" style="animation: pillPulse 0.8s ease-in-out infinite;"/>
+                    </g>
+                    <!-- Order check badge top-right -->
+                    <circle cx="50" cy="14" r="9" fill="rgba(16,185,129,0.2)" stroke="rgba(16,185,129,0.55)" stroke-width="1.5" style="animation: checkPop 2.8s 0.5s ease-in-out infinite;"/>
+                    <polyline points="46,14 49,17 54,11" stroke="rgba(16,185,129,0.95)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" style="animation: checkPop 2.8s 0.5s ease-in-out infinite;"/>
+                  </svg>
+                </div>
+                <span class="login-scene-label">Adım 4</span>
+                <span class="login-scene-title">Siparişi Gönder</span>
+                <span class="login-scene-desc">Planı onaylayın, tek tıkla depoya gönderin</span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+        <div class="login-form-area">
+          <div style="margin-bottom: 48px;">
+            <h2 style="font-size: 32px; margin-bottom: 8px;">Sisteme Giriş</h2>
+            <p style="color: var(--ink-500); font-size: 15px;">Ahenk Eczanesi hesabınıza giriş yapın.</p>
+          </div>
+          
+          <div class="form-group">
+            <label>Kullanıcı Adı</label>
+            <input type="text" class="input" value="ahenk_ecz" readonly style="background: var(--ink-100); color: var(--ink-500);">
+          </div>
+          <div class="form-group">
+            <label>Şifre</label>
+            <input type="password" class="input" placeholder="Şifrenizi girin" autofocus>
+          </div>
+          
+          <div class="flex justify-between items-center mb-6" style="font-size: 14px;">
+            <label class="flex items-center gap-2 cursor-pointer" style="font-weight: 500;">
+              <input type="checkbox" checked> Beni hatırla
+            </label>
+            <a href="#" style="color: var(--brand-500); font-weight: 600; text-decoration: none;">Şifremi unuttum</a>
+          </div>
+          
+          <button class="btn btn-primary" style="width: 100%; padding: 14px; font-size: 16px;" onclick="switchMock('home')">Giriş Yap</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOME DASHBOARD -->
+    <div id="page-home" class="page">
+      <div class="home-wrapper">
+        <div class="dashboard-header">
+          <div>
+            <h1 style="font-size: 36px; margin-bottom: 8px;">Günaydın, Ahmet 👋</h1>
+            <p style="font-size: 16px; color: var(--ink-500);">Bugün 124 arama yaptın, aktif planda 2 bekleyen ürün var.</p>
+          </div>
+          <div class="metric-group">
+            <div class="metric-card success">
+              <div class="metric-val">100<span style="font-size: 18px; color: var(--mint-500);">%</span></div>
+              <div class="metric-lbl">Depo Sağlığı</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val">2</div>
+              <div class="metric-lbl">Plandaki İlaç</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- TOPLU ARAMA BANNER -->
+        <div class="card mb-6 bulk-banner" onclick="switchMock('bulk')" style="background: linear-gradient(135deg, #0f172a 0%, #1a0505 60%, #1c0808 100%) !important; color: white !important; border: 1px solid rgba(220,38,38,0.18) !important; overflow: hidden; cursor: pointer; position: relative; transition: box-shadow 0.2s, transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 16px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(220,38,38,0.25)';" onmouseout="this.style.transform=''; this.style.boxShadow='';">
+          <!-- Background glow orbs -->
+          <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden;">
+            <div style="position:absolute;width:320px;height:320px;background:radial-gradient(circle,rgba(220,38,38,0.12) 0%,transparent 70%);top:-80px;right:120px;border-radius:50%;"></div>
+            <div style="position:absolute;width:200px;height:200px;background:radial-gradient(circle,rgba(220,38,38,0.08) 0%,transparent 70%);bottom:-60px;left:200px;border-radius:50%;"></div>
+          </div>
+
+          <div style="display:flex; align-items:stretch; position:relative; z-index:1;">
+            <!-- LEFT: copy + CTA -->
+            <div style="flex:1; padding: 28px 32px; display:flex; flex-direction:column; justify-content:center; gap:16px;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:44px;height:44px;background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.3);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+                  <span class="material-symbols-outlined" style="font-size:22px;color:rgba(220,38,38,0.9);">document_scanner</span>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(220,38,38,0.7);margin-bottom:3px;">Yapay Zeka Destekli</div>
+                  <h3 style="font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.02em;margin:0;line-height:1.1;">Toplu Liste Arama Motoru</h3>
+                </div>
+              </div>
+              <p style="font-size:14px;color:rgba(255,255,255,0.55);margin:0;line-height:1.6;max-width:480px;">Excel, CSV veya metin belgesindeki <strong style="color:rgba(255,255,255,0.8);">yüzlerce ilacı</strong> tek seferde okutun. Tüm depolarla karşılaştırın, en iyi fiyat optimizasyonunu <strong style="color:rgba(255,255,255,0.8);">saniyeler içinde</strong> yapın.</p>
+              <div style="display:flex;align-items:center;gap:24px;">
+                <button onclick="event.stopPropagation();switchMock('bulk')" style="background:rgba(220,38,38,0.9);color:#fff;font-family:var(--font-ui);font-weight:600;border:none;padding:11px 22px;font-size:13px;letter-spacing:0.02em;border-radius:var(--radius-pill);cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(220,38,38,0.35);transition:0.2s;" onmouseover="this.style.background='rgba(185,28,28,1)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(220,38,38,0.9)'; this.style.transform=''">Hemen Başla <span class="material-symbols-outlined" style="font-size:16px;">arrow_forward</span></button>
+                <div style="display:flex;gap:20px;">
+                  <div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:#fff;">500+</div><div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.06em;">İlaç/Saat</div></div>
+                  <div style="width:1px;background:rgba(255,255,255,0.08);"></div>
+                  <div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:#fff;">6</div><div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.06em;">Depo</div></div>
+                  <div style="width:1px;background:rgba(255,255,255,0.08);"></div>
+                  <div style="text-align:center;"><div style="font-size:20px;font-weight:700;color:rgba(220,38,38,0.9);">%23</div><div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.06em;">Tasarruf</div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT: animated scan visualization -->
+            <div style="width:240px;min-width:240px;border-left:1px solid rgba(255,255,255,0.06);padding:20px 24px;display:flex;flex-direction:column;gap:6px;justify-content:center;position:relative;overflow:hidden;" class="bulk-scan-panel">
+              <!-- scan line -->
+              <div class="bulk-scan-line"></div>
+              <!-- drug name rows -->
+              <div class="bulk-row"><span class="bulk-row-name">Augmentin 1g 14 Tb</span><span class="bulk-row-badge" style="background:rgba(220,38,38,0.2);color:rgba(220,38,38,0.85);">✓ Bulundu</span></div>
+              <div class="bulk-row" style="animation-delay:0.15s"><span class="bulk-row-name">Depo-Medrol 40mg</span><span class="bulk-row-badge" style="background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);">Tarıyor…</span></div>
+              <div class="bulk-row" style="animation-delay:0.3s"><span class="bulk-row-name">Pantpas 40mg 28 Tb</span><span class="bulk-row-badge" style="background:rgba(220,38,38,0.2);color:rgba(220,38,38,0.85);">✓ Bulundu</span></div>
+              <div class="bulk-row" style="animation-delay:0.45s"><span class="bulk-row-name">Majezik 100mg</span><span class="bulk-row-badge" style="background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);">Tarıyor…</span></div>
+              <div class="bulk-row" style="animation-delay:0.6s"><span class="bulk-row-name">Coumadin 5mg 50 Tb</span><span class="bulk-row-badge" style="background:rgba(220,38,38,0.2);color:rgba(220,38,38,0.85);">✓ Bulundu</span></div>
+              <div class="bulk-row" style="animation-delay:0.75s"><span class="bulk-row-name">Xarelto 20mg 28 Tb</span><span class="bulk-row-badge" style="background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.4);">Tarıyor…</span></div>
+              <div style="margin-top:8px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:0.04em;">↑ 248 ilaç tarandı · 3.2sn</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- LEFT: PLAN ONIZLEMESI -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Plan Önizlemesi</div>
+            </div>
+            <div style="padding: 24px;">
+              <div class="flex justify-between items-center mb-4">
+                <div style="font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase;">Toplam Tutar</div>
+                <div class="font-mono font-weight-800" style="font-size: 24px; color: var(--ink-900);">153,70 ₺</div>
+              </div>
+              
+              <div style="font-size: 12px; font-weight: 700; color: var(--ink-700); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Plandaki Ürünler</div>
+              
+              <div style="border: 1px solid var(--ink-200); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 24px;">
+                <!-- Drug Item 1 -->
+                <div style="padding: 16px; border-bottom: 1px solid var(--ink-100); background: #fff; transition: 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='#fff'" onclick="switchMock('plan')">
+                  <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--ink-900); line-height: 1.3;">PIROFEN 120 MG 150 ML PED SRP.</div>
+                  <div class="flex justify-between items-center">
+                    <div class="flex gap-2">
+                      <div class="depot-label pharma" style="font-size: 11px;"><span class="depot-dot"></span> Anadolu Pharma</div>
+                      <div class="depot-label sentez" style="font-size: 11px;"><span class="depot-dot"></span> Sentez</div>
+                    </div>
+                    <div class="font-mono font-weight-700" style="font-size: 13px; color: var(--ink-700);">6 Adet</div>
+                  </div>
+                </div>
+                
+                <!-- Drug Item 2 (Placeholder) -->
+                <div style="padding: 16px; background: #fff; transition: 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='#fff'" onclick="switchMock('plan')">
+                  <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--ink-900); line-height: 1.3;">PAROL 500 MG TABLET</div>
+                  <div class="flex justify-between items-center">
+                    <div class="flex gap-2">
+                      <div class="depot-label selcuk" style="font-size: 11px;"><span class="depot-dot"></span> Selçuk Ecza</div>
+                    </div>
+                    <div class="font-mono font-weight-700" style="font-size: 13px; color: var(--ink-700);">10 Adet</div>
+                  </div>
+                </div>
+              </div>
+              
+              <button class="btn btn-brand" style="width: 100%;" onclick="switchMock('plan')">Planı Düzenle & Gönder</button>
+            </div>
+          </div>
+          
+          <!-- RIGHT: GECMIS / SON ARAMALAR -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Sipariş Geçmişi & Son Aramalar</div>
+              <button class="btn btn-ghost" style="font-size: 13px;">Tümünü Gör</button>
+            </div>
+            <div>
+              <!-- History Item -->
+              <div class="flex items-start gap-4" style="padding: 16px 24px; border-bottom: 1px solid var(--ink-100); cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='#fff'">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--mint-50); color: var(--mint-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                  <span class="material-symbols-outlined" style="font-size: 20px;">check</span>
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 700; font-size: 14px; color: var(--ink-900); margin-bottom: 4px;">Selçuk Ecza - Sipariş Gönderildi</div>
+                  <div style="font-size: 12px; color: var(--ink-500);">Bugün, 14:30 <span style="margin: 0 4px;">•</span> 14 Kalem</div>
+                </div>
+                <div class="font-mono font-weight-700" style="font-size: 14px;">1.450,20 ₺</div>
+              </div>
+              
+              <!-- Search Item -->
+              <div class="flex items-start gap-4" style="padding: 16px 24px; border-bottom: 1px solid var(--ink-100); cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='#fff'" onclick="switchMock('search-detail')">
+                <div class="btn-icon" style="background: var(--ink-50); border: 1px solid var(--ink-200); width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;">
+                  <span class="material-symbols-outlined" style="font-size: 20px;">search</span>
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; font-size: 14px; color: var(--ink-900); margin-bottom: 4px;">PIROFEN 120 MG 150 ML PED SRP.</div>
+                  <div style="font-size: 12px; color: var(--ink-500);">Arama Yapıldı <span style="margin: 0 4px;">•</span> 2 saat önce</div>
+                </div>
+                <span class="material-symbols-outlined text-muted">chevron_right</span>
+              </div>
+              
+              <!-- Search Item -->
+              <div class="flex items-start gap-4" style="padding: 16px 24px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='#fff'">
+                <div class="btn-icon" style="background: var(--ink-50); border: 1px solid var(--ink-200); width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;">
+                  <span class="material-symbols-outlined" style="font-size: 20px;">search</span>
+                </div>
+                <div style="flex: 1;">
+                  <div style="font-weight: 600; font-size: 14px; color: var(--ink-900); margin-bottom: 4px;">PAROL 500 MG TABLET</div>
+                  <div style="font-size: 12px; color: var(--ink-500);">Arama Yapıldı <span style="margin: 0 4px;">•</span> Dün, 15:45</div>
+                </div>
+                <span class="material-symbols-outlined text-muted">chevron_right</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BULK SEARCH -->
+    <div id="page-bulk" class="page">
+      <div style="padding: 48px; max-width: 1000px; margin: 0 auto;">
+        <button class="btn btn-ghost mb-6" onclick="switchMock('home')" style="padding: 0; font-size: 15px;"><span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span> Ana Sayfaya Dön</button>
+        <div class="flex justify-between items-end mb-8">
+          <div>
+            <h1 style="font-size: 36px; margin-bottom: 8px;">Toplu Arama</h1>
+            <p style="font-size: 16px; color: var(--ink-500);">Elinizdeki reçete veya listeyi kopyalayıp buraya yapıştırın, sistem tüm kalemleri aynı anda sorgulasın.</p>
+          </div>
+        </div>
+        
+        <div class="card" style="padding: 32px; margin-bottom: 24px;">
+          <textarea class="input" rows="8" placeholder="Örnek:&#10;PIROFEN 120 MG 150 ML PED SRP. - 5 Adet&#10;PAROL 500 MG TABLET - 10 Adet" style="margin-bottom: 16px; font-family: var(--font-mono); line-height: 1.6;"></textarea>
+          
+          <div class="bulk-dropzone mb-4">
+            <span class="material-symbols-outlined" style="font-size: 48px; color: var(--ink-400); margin-bottom: 16px;">upload_file</span>
+            <h3 style="font-size: 18px; margin-bottom: 8px;">Veya Excel (.xlsx) / CSV dosyası yükleyin</h3>
+            <p style="color: var(--ink-500);">Dosyanızı buraya sürükleyin veya seçmek için tıklayın.</p>
+          </div>
+          
+          <div style="text-align: right;">
+            <button class="btn btn-brand" style="padding: 12px 24px; font-size: 16px;">Sorguyu Başlat</button>
+          </div>
+        </div>
+        
+        <!-- DEMO RESULT AREA -->
+        <div class="card" style="padding: 0; overflow: hidden; border-color: rgba(16,185,129,0.3); box-shadow: 0 4px 12px rgba(16,185,129,0.05);">
+          <div style="background: var(--mint-50); padding: 16px 24px; border-bottom: 1px solid rgba(16,185,129,0.2); display: flex; justify-content: space-between; align-items: center;">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-success">check_circle</span>
+              <div style="font-weight: 700; color: var(--mint-600); font-size: 16px;">Tarama Tamamlandı</div>
+            </div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--ink-700);">Toplam 4 İlaç Okundu</div>
+          </div>
+          <div class="table-container" style="border: none; border-radius: 0; box-shadow: none;">
+            <table class="data-table" style="background: #fff; width: 100%;">
+              <thead>
+                <tr>
+                  <th>Eşleşen Ürün & Okunan Metin</th>
+                  <th style="width: 140px;">Miktar</th>
+                  <th>Tercih Edilen Depo & MF</th>
+                  <th style="text-align: right;">Birim Fiyat</th>
+                  <th style="text-align: right;">Aksiyon</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="row-highlight" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background=''" onclick="openBulkDrawer()">
+                  <td>
+                    <div style="font-weight: 700; color: var(--ink-900); margin-bottom: 4px;">PIROFEN 120 MG 150 ML PED SRP.</div>
+                    <div style="color: var(--ink-500); font-family: var(--font-mono); font-size: 11px;">↳ "Pirofen 120 ped srp 5 adet"</div>
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-1" onclick="event.stopPropagation()">
+                      <button class="btn btn-outline" style="width: 28px; height: 28px; padding: 0;"><span class="material-symbols-outlined" style="font-size: 16px;">remove</span></button>
+                      <input type="text" class="input" value="5" style="width: 40px; text-align: center; font-family: var(--font-mono); font-weight: 700; height: 28px; padding: 0;">
+                      <button class="btn btn-outline" style="width: 28px; height: 28px; padding: 0;"><span class="material-symbols-outlined" style="font-size: 16px;">add</span></button>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="depot-label pharma mb-1"><span class="depot-dot"></span> Anadolu Pharma</div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--ink-600);">Kampanya: <span style="font-weight: 700; color: var(--ink-900);">MF 10+12</span></div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div class="font-mono text-success font-weight-700" style="font-size: 16px;">23,33 ₺</div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div class="flex justify-end gap-2" onclick="event.stopPropagation()">
+                      <button class="btn-icon" style="color: var(--brand-500); background: var(--brand-50);" title="Web'de Aç"><span class="material-symbols-outlined" style="font-size: 18px;">open_in_new</span></button>
+                      <button class="btn btn-brand" style="font-size: 12px; padding: 6px 12px;">Plana Ekle</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background=''" onclick="openBulkDrawer()">
+                  <td>
+                    <div style="font-weight: 700; color: var(--ink-900); margin-bottom: 4px;">PAROL 500 MG TABLET</div>
+                    <div style="color: var(--ink-500); font-family: var(--font-mono); font-size: 11px;">↳ "Parol tb - 10"</div>
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-1" onclick="event.stopPropagation()">
+                      <button class="btn btn-outline" style="width: 28px; height: 28px; padding: 0;"><span class="material-symbols-outlined" style="font-size: 16px;">remove</span></button>
+                      <input type="text" class="input" value="10" style="width: 40px; text-align: center; font-family: var(--font-mono); font-weight: 700; height: 28px; padding: 0;">
+                      <button class="btn btn-outline" style="width: 28px; height: 28px; padding: 0;"><span class="material-symbols-outlined" style="font-size: 16px;">add</span></button>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="depot-label selcuk mb-1"><span class="depot-dot"></span> Selçuk Ecza</div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--ink-600);">Kampanya: Yok</div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div class="font-mono font-weight-700" style="font-size: 16px;">14,50 ₺</div>
+                  </td>
+                  <td style="text-align: right;">
+                    <div class="flex justify-end gap-2" onclick="event.stopPropagation()">
+                      <button class="btn-icon" style="color: var(--brand-500); background: var(--brand-50);" title="Web'de Aç"><span class="material-symbols-outlined" style="font-size: 18px;">open_in_new</span></button>
+                      <button class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; border-color: var(--brand-500); color: var(--brand-500);">Plana Ekle</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr style="background: var(--rose-50);">
+                  <td>
+                    <div style="font-weight: 600; color: var(--rose-500); margin-bottom: 4px;">Kesin Eşleşme Bulunamadı</div>
+                    <div style="color: var(--ink-500); font-family: var(--font-mono); font-size: 11px;">↳ "Majezik yan sanayi"</div>
+                  </td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td style="text-align: right;">-</td>
+                  <td style="text-align: right;">
+                    <button class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; background: #fff;">Manuel Ara</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEARCH: VARIANTS VIEW -->
+    <div id="page-search-variants" class="page">
+      <div class="variant-list">
+        <button class="btn btn-ghost mb-6" onclick="switchMock('home')" style="padding: 0; font-size: 15px;"><span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span> Ana Sayfaya Dön</button>
+        
+        <h1 style="font-size: 32px; margin-bottom: 8px;">Arama Sonuçları</h1>
+        <p style="color: var(--ink-500); font-size: 16px; margin-bottom: 32px;">"Pirofen" için 4 farklı form bulundu. İncelemek istediğiniz formu seçin.</p>
+        
+        <div class="variant-item" onclick="switchMock('search-detail')">
+          <div>
+            <div class="variant-name mb-2">PIROFEN 120 MG 150 ML PED SRP ( CALPOL )</div>
+            <div class="flex gap-3 text-sm">
+              <span class="badge badge-outline">6 Teklif</span>
+              <span class="badge badge-outline">Barkod: 8699525707703</span>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; margin-bottom: 4px;">Başlayan Fiyat</div>
+            <div class="variant-price">23,33 ₺</div>
+          </div>
+        </div>
+        
+        <div class="variant-item">
+          <div>
+            <div class="variant-name mb-2">PIROFEN 250 MG 150 ML PED SRP ( CALPOL )</div>
+            <div class="flex gap-3 text-sm">
+              <span class="badge badge-outline">5 Teklif</span>
+              <span class="badge badge-outline">Barkod: 8699525707704</span>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; margin-bottom: 4px;">Başlayan Fiyat</div>
+            <div class="variant-price" style="color: var(--ink-900);">30,46 ₺</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEARCH: DETAIL VIEW -->
+    <div id="page-search-detail" class="page">
+      <div class="search-layout">
+        <div class="search-sidebar">
+          <div style="padding: 24px; border-bottom: 1px solid var(--ink-200);">
+            <button class="btn btn-ghost mb-4" onclick="switchMock('search-variants')" style="padding: 0;"><span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span> Formlara Dön</button>
+            <div style="font-size: 11px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">Aktif Seçim</div>
+            <div class="card" style="padding: 20px;">
+              <h3 style="font-size: 16px; margin-bottom: 12px; line-height: 1.3;">PIROFEN 120 MG 150 ML PED SRP.</h3>
+              <div class="flex items-center justify-between mb-4 pb-4" style="border-bottom: 1px dashed var(--ink-200);">
+                <div class="depot-label pharma"><span class="depot-dot"></span> Anadolu Pharma</div>
+                <div class="font-mono font-weight-700" style="color: var(--mint-600);">23,33 ₺</div>
+              </div>
+              <div class="flex items-center gap-2 mb-4">
+                <button class="btn btn-outline" style="width: 40px; height: 40px; padding: 0;"><span class="material-symbols-outlined">remove</span></button>
+                <div style="flex:1; text-align: center; font-weight: 700; font-family: var(--font-mono); font-size: 18px;">1</div>
+                <button class="btn btn-outline" style="width: 40px; height: 40px; padding: 0;"><span class="material-symbols-outlined">add</span></button>
+              </div>
+              <button class="btn btn-brand" style="width: 100%;">Plana Ekle (23,33 ₺)</button>
+            </div>
+          </div>
+          
+          <div style="padding: 24px; flex: 1; background: var(--ink-100); border-radius: 0 0 var(--radius-lg) var(--radius-lg);">
+            <div class="flex justify-between items-center mb-4">
+              <div style="font-size: 11px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em;">Sipariş Planı Özeti</div>
+            </div>
+            
+            <div style="background: #fff; border: 1px solid var(--ink-200); border-radius: var(--radius-sm); margin-bottom: 16px; overflow: hidden; box-shadow: var(--shadow-sm);">
+              <!-- Product 1 -->
+              <div style="padding: 12px; border-bottom: 1px solid var(--ink-100);">
+                <div style="font-weight: 700; font-size: 12px; margin-bottom: 6px; color: var(--ink-900); line-height: 1.2;">PIROFEN 120 MG 150 ML PED SRP.</div>
+                <div class="flex justify-between items-center mb-2">
+                  <div class="flex gap-1">
+                    <div class="depot-label pharma" style="font-size: 9px; padding: 2px 4px;"><span class="depot-dot" style="width: 4px; height: 4px;"></span> Anadolu Ph.</div>
+                    <div class="depot-label sentez" style="font-size: 9px; padding: 2px 4px;"><span class="depot-dot" style="width: 4px; height: 4px;"></span> Sentez</div>
+                  </div>
+                  <div style="font-size: 11px; font-weight: 600; color: var(--brand-600); background: var(--brand-50); padding: 2px 6px; border-radius: 4px;">6 Adet</div>
+                </div>
+                <div class="flex justify-between items-center mt-1">
+                  <div style="font-size: 10px; color: var(--ink-500);">Ort: <span class="font-mono text-success font-weight-700">25,61 ₺</span></div>
+                  <div class="font-mono font-weight-700" style="font-size: 12px;">153,70 ₺</div>
+                </div>
+              </div>
+              
+              <!-- Product 2 -->
+              <div style="padding: 12px;">
+                <div style="font-weight: 700; font-size: 12px; margin-bottom: 6px; color: var(--ink-900); line-height: 1.2;">PAROL 500 MG TABLET</div>
+                <div class="flex justify-between items-center mb-2">
+                  <div class="depot-label selcuk" style="font-size: 9px; padding: 2px 4px;"><span class="depot-dot" style="width: 4px; height: 4px;"></span> Selçuk Ecza</div>
+                  <div style="font-size: 11px; font-weight: 600; color: var(--brand-600); background: var(--brand-50); padding: 2px 6px; border-radius: 4px;">10 Adet</div>
+                </div>
+                <div class="flex justify-between items-center mt-1">
+                  <div style="font-size: 10px; color: var(--ink-500);">Ort: <span class="font-mono text-success font-weight-700">14,50 ₺</span></div>
+                  <div class="font-mono font-weight-700" style="font-size: 12px;">145,00 ₺</div>
+                </div>
+              </div>
+            </div>
+            
+            <div style="background: var(--brand-50); padding: 12px; border-radius: var(--radius-sm); border: 1px solid rgba(220,38,38,0.2);">
+              <div class="flex justify-between items-center mb-1">
+                <span style="font-size: 11px; font-weight: 600; color: var(--brand-600);">Toplam: 16 Adet (3 Depo)</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span style="font-size: 12px; font-weight: 700; color: var(--ink-900);">Genel Toplam</span>
+                <span class="font-mono" style="font-size: 16px; font-weight: 800; color: var(--mint-600);">298,70 ₺</span>
+              </div>
+            </div>
+            
+            <button class="btn btn-outline" style="width: 100%; margin-top: 12px; font-size: 12px; padding: 8px;" onclick="switchMock('plan')">Planı Düzenle & Gönder</button>
+          </div>
+        </div>
+        
+        <div class="search-main">
+          <div class="detail-wrapper">
+            
+            <div class="product-hero">
+              <div class="product-hero-info">
+                <div class="product-hero-icon" style="width: 88px; height: 88px; background: #fff; border-radius: var(--radius-md); border: 1px dashed var(--ink-300); display: flex; align-items: center; justify-content: center; box-shadow: none; flex-shrink: 0;" title="İlaç Görseli">
+                  <span class="material-symbols-outlined" style="font-size: 32px; color: var(--ink-300);">add_a_photo</span>
+                </div>
+                <div>
+                  <div style="font-size: 12px; font-weight: 700; color: var(--brand-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">İlaç Detayı</div>
+                  <h2>PIROFEN 120 MG 150 ML PED SRP.</h2>
+                  <div class="flex gap-2 mt-2">
+                    <span class="badge badge-outline">Barkod: 8699525707703</span>
+                    <span class="badge badge-outline">Grup: Analjezik</span>
+                  </div>
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">En Uygun Maliyet</div>
+                <div class="font-mono" style="font-size: 36px; font-weight: 800; color: var(--mint-600); line-height: 1;">23,33 ₺</div>
+                <div style="font-size: 13px; font-weight: 600; color: var(--ink-500); margin-top: 6px;">Satış (PSF): <span class="font-mono" style="color: var(--ink-900); font-weight: 700;">48,50 ₺</span></div>
+                <button class="btn btn-primary" style="margin-top: 16px;" onclick="document.getElementById('mf-calc-wrap').classList.toggle('open')">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">calculate</span> Mal Fazlası Hesapla
+                </button>
+              </div>
+            </div>
+            
+            <!-- Hidden MF Calc Wrapper -->
+            <div id="mf-calc-wrap" class="mf-calc-wrap">
+              <div class="mf-calc-inner">
+                <div class="flex justify-between items-center mb-4">
+                  <div class="flex items-center gap-2" style="font-weight: 700; font-size: 18px;">
+                    <span class="material-symbols-outlined" style="color: var(--brand-500);">insights</span> Akıllı MF Hesaplayıcı
+                  </div>
+                  <button class="btn-icon" style="color: #fff; opacity: 0.7;" onclick="document.getElementById('mf-calc-wrap').classList.remove('open')"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <p style="color: var(--ink-400); margin-bottom: 24px;">Satın almak istediğiniz net adeti veya hedeflediğiniz kampanyayı seçerek gerçek maliyetleri görün.</p>
+                
+                <div class="mf-input-row">
+                  <div style="font-size: 14px; font-weight: 600; color: var(--ink-300);">Miktar Girin:</div>
+                  <input type="number" class="mf-huge-input" value="1">
+                  <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.1); margin: 0 16px;"></div>
+                  <div style="flex: 1;">
+                    <div style="font-size: 12px; font-weight: 600; color: var(--ink-400); text-transform: uppercase; margin-bottom: 8px;">Hedeflenen Kampanyalar</div>
+                    <div class="mf-suggestions">
+                      <div class="mf-tag"><span class="font-mono font-weight-700">11</span> <span style="font-size: 12px; opacity: 0.7;">(10 al 11)</span></div>
+                      <div class="mf-tag"><span class="font-mono font-weight-700">17</span> <span style="font-size: 12px; opacity: 0.7;">(10 al 17)</span></div>
+                      <div class="mf-tag best">
+                        <span class="material-symbols-outlined" style="font-size: 16px;">star</span>
+                        <span class="font-mono font-weight-700">22</span> 
+                        <span style="font-size: 12px; font-weight: 600;">(EN İYİ)</span>
+                      </div>
+                      <div class="mf-tag"><span class="font-mono font-weight-700">33</span> <span style="font-size: 12px; opacity: 0.7;">(30 al 33)</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex justify-between items-center mb-4 mt-6">
+              <h3 style="font-size: 20px;">Depo Teklifleri</h3>
+              <div style="font-size: 13px; color: var(--ink-500); font-weight: 500;">Sıralama: <span style="color: var(--ink-900); font-weight: 700;">En Uygun Fiyat</span></div>
+            </div>
+            
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Depo</th>
+                    <th>Stok Durumu</th>
+                    <th>Kampanya / MF</th>
+                    <th style="text-align: right;">Birim Maliyet</th>
+                    <th style="text-align: right;">Toplam Ödeme</th>
+                    <th style="text-align: right;">Aksiyon</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="row-highlight">
+                    <td>
+                      <div class="flex items-center gap-2 mb-2">
+                        <div class="depot-label pharma"><span class="depot-dot"></span> Anadolu Pharma</div>
+                        <button class="btn-icon" style="width: 24px; height: 24px; color: var(--brand-500);" title="Web'de Aç"><span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span></button>
+                      </div>
+                      <div><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: var(--mint-600);">En Uygun Seçenek</span></div>
+                    </td>
+                    <td style="color: var(--ink-500); font-weight: 500;">316 Adet</td>
+                    <td style="font-weight: 700;">MF 10+12</td>
+                    <td style="text-align: right;" class="font-mono font-weight-700 text-success">23,33 ₺</td>
+                    <td style="text-align: right;" class="font-mono font-weight-700 text-success">23,33 ₺</td>
+                    <td style="text-align: right;">
+                      <button class="btn btn-outline" style="border-color: var(--brand-500); color: var(--brand-500);">Sepete Ekle</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="flex items-center gap-2">
+                        <div class="depot-label itriyat"><span class="depot-dot"></span> Anadolu İtriyat</div>
+                        <button class="btn-icon" style="width: 24px; height: 24px; color: var(--brand-500);" title="Web'de Aç"><span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span></button>
+                      </div>
+                    </td>
+                    <td style="color: var(--ink-500); font-weight: 500;">Stokta Var</td>
+                    <td style="font-weight: 600; color: var(--ink-700);">MF 10+11</td>
+                    <td style="text-align: right;" class="font-mono font-weight-600">24,44 ₺</td>
+                    <td style="text-align: right;" class="font-mono font-weight-600">24,44 ₺</td>
+                    <td style="text-align: right;"><button class="btn btn-ghost">Seç</button></td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="flex items-center gap-2">
+                        <div class="depot-label sentez"><span class="depot-dot"></span> Sentez B2B</div>
+                        <button class="btn-icon" style="width: 24px; height: 24px; color: var(--brand-500);" title="Web'de Aç"><span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span></button>
+                      </div>
+                    </td>
+                    <td style="color: var(--ink-500); font-weight: 500;">Stokta Var</td>
+                    <td style="font-weight: 600; color: var(--ink-700);">MF 10+7</td>
+                    <td style="text-align: right;" class="font-mono font-weight-600">30,19 ₺</td>
+                    <td style="text-align: right;" class="font-mono font-weight-600">30,19 ₺</td>
+                    <td style="text-align: right;"><button class="btn btn-ghost">Seç</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORDER PLAN -->
+    <div id="page-plan" class="page">
+      <div style="padding: 48px; max-width: 1000px; margin: 0 auto;">
+        <button class="btn btn-ghost mb-6" onclick="switchMock('home')" style="padding: 0; font-size: 15px;"><span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span> Ana Sayfaya Dön</button>
+        
+        <div class="flex justify-between items-end mb-8">
+          <div>
+            <h1 style="font-size: 36px; margin-bottom: 8px;">Aktif Sipariş Planı</h1>
+            <p style="font-size: 16px; color: var(--ink-500);">Depolara aktarılmayı bekleyen optimize edilmiş sepetiniz.</p>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Toplam Tutar</div>
+            <div class="font-mono" style="font-size: 32px; font-weight: 800; color: var(--ink-900); line-height: 1;">153,70 ₺</div>
+          </div>
+        </div>
+        
+        <!-- Accordion Item 1 -->
+        <div class="plan-accordion open" onclick="this.classList.toggle('open')">
+          <div class="plan-acc-head">
+            <div class="flex items-center gap-4">
+              <div style="width: 48px; height: 48px; background: #fff; border: 1px dashed var(--ink-300); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; color: var(--ink-300); flex-shrink: 0;" title="İlaç Görseli">
+                <span class="material-symbols-outlined" style="font-size: 20px;">image</span>
+              </div>
+              <div>
+                <div style="font-weight: 700; font-size: 16px; margin-bottom: 4px;">PIROFEN 120 MG 150 ML PED SRP.</div>
+                <div class="flex gap-3">
+                  <span style="font-size: 13px; color: var(--ink-500);">Hedef: 6 Adet</span>
+                  <span style="font-size: 13px; color: var(--ink-500);">•</span>
+                  <span style="font-size: 13px; color: var(--ink-500);">2 Farklı Depo</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="font-mono font-weight-700" style="font-size: 18px;">153,70 ₺</div>
+              <!-- This edit button triggers the drawer -->
+              <button class="btn-icon" style="background: var(--ink-100);" onclick="event.stopPropagation(); openDrawer()"><span class="material-symbols-outlined">edit</span></button>
+              <span class="material-symbols-outlined" style="color: var(--ink-400);">expand_more</span>
+            </div>
+          </div>
+          <div class="plan-acc-body" onclick="event.stopPropagation()">
+            <div style="background: #fff; border: 1px solid var(--ink-200); border-radius: var(--radius-md); overflow: hidden;">
+              <table class="data-table" style="background: #fff;">
+                <thead>
+                  <tr>
+                    <th>Depo Seçimi</th>
+                    <th>Adet × Birim Fiyat</th>
+                    <th style="text-align: right;">Toplam</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="depot-label sentez"><span class="depot-dot"></span> Sentez B2B</div></td>
+                    <td class="font-mono" style="color: var(--ink-700);">2 × 30,19 ₺</td>
+                    <td style="text-align: right;" class="font-mono font-weight-700">60,38 ₺</td>
+                  </tr>
+                  <tr>
+                    <td><div class="depot-label pharma"><span class="depot-dot"></span> Anadolu Pharma</div></td>
+                    <td class="font-mono" style="color: var(--ink-700);">4 × 23,33 ₺</td>
+                    <td style="text-align: right;" class="font-mono font-weight-700">93,32 ₺</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+    
+    <!-- Drawer Overlay (Order Editing) -->
+    <div id="edit-drawer-overlay" class="drawer-overlay" onclick="closeDrawer()"></div>
+    <div id="edit-drawer" class="drawer">
+      <div class="drawer-header">
+        <div>
+          <h2 style="font-size: 20px; line-height: 1.2; margin-bottom: 4px;">Siparişi Düzenle</h2>
+          <div style="font-size: 13px; color: var(--ink-500);">PIROFEN 120 MG 150 ML PED SRP.</div>
+        </div>
+        <button class="btn-icon" onclick="closeDrawer()"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="drawer-body">
+        
+        <div class="card mb-6" style="padding: 20px;">
+          <div class="flex justify-between items-center mb-4 pb-4" style="border-bottom: 1px solid var(--ink-100);">
+            <div class="depot-label sentez"><span class="depot-dot"></span> Sentez B2B</div>
+            <div class="font-mono font-weight-700">60,38 ₺</div>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <button class="btn btn-outline" style="width: 36px; height: 36px; padding: 0;"><span class="material-symbols-outlined">remove</span></button>
+              <input type="text" class="input" value="2" style="width: 50px; text-align: center; font-family: var(--font-mono); font-weight: 700; height: 36px; padding: 0;">
+              <button class="btn btn-outline" style="width: 36px; height: 36px; padding: 0;"><span class="material-symbols-outlined">add</span></button>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px; color: var(--ink-700);"><span class="material-symbols-outlined" style="font-size: 16px;">calculate</span> MF Seç</button>
+              <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px; color: var(--brand-600); border-color: rgba(220, 38, 38, 0.3);"><span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span> Web'de Aç</button>
+              <button class="btn btn-ghost" style="color: var(--rose-500); padding: 6px; margin-left: 4px;"><span class="material-symbols-outlined" style="font-size: 18px;">delete</span></button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card mb-6" style="padding: 20px;">
+          <div class="flex justify-between items-center mb-4 pb-4" style="border-bottom: 1px solid var(--ink-100);">
+            <div class="depot-label pharma"><span class="depot-dot"></span> Anadolu Pharma</div>
+            <div class="font-mono font-weight-700">93,32 ₺</div>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <button class="btn btn-outline" style="width: 36px; height: 36px; padding: 0;"><span class="material-symbols-outlined">remove</span></button>
+              <input type="text" class="input" value="4" style="width: 50px; text-align: center; font-family: var(--font-mono); font-weight: 700; height: 36px; padding: 0;">
+              <button class="btn btn-outline" style="width: 36px; height: 36px; padding: 0;"><span class="material-symbols-outlined">add</span></button>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px; color: var(--ink-700);"><span class="material-symbols-outlined" style="font-size: 16px;">calculate</span> MF Seç</button>
+              <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px; color: var(--brand-600); border-color: rgba(220, 38, 38, 0.3);"><span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span> Web'de Aç</button>
+              <button class="btn btn-ghost" style="color: var(--rose-500); padding: 6px; margin-left: 4px;"><span class="material-symbols-outlined" style="font-size: 18px;">delete</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--ink-700);">Alternatif Depolar</h3>
+          <div class="flex justify-between items-center mb-2" style="background: #fff; padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--ink-200); transition: 0.2s;" onmouseover="this.style.borderColor='var(--brand-500)'; this.style.boxShadow='var(--shadow-sm)';" onmouseout="this.style.borderColor='var(--ink-200)'; this.style.boxShadow='none';">
+            <div style="flex: 1;">
+              <div class="depot-label alliance mb-1"><span class="depot-dot"></span> Alliance Healthcare</div>
+              <div style="font-size: 12px; color: var(--ink-500); font-weight: 500;">Stokta Var</div>
+            </div>
+            <div style="flex: 1; text-align: center;">
+              <div style="font-size: 10px; font-weight: 700; color: var(--ink-400); text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.05em;">Kampanya / MF</div>
+              <div style="font-weight: 700; font-size: 13px; color: var(--ink-900);">Yok</div>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-end;">
+              <div class="font-mono font-weight-700" style="color: var(--ink-900); font-size: 15px; margin-bottom: 6px;">48,25 ₺</div>
+              <button class="btn btn-outline" style="font-size: 12px; padding: 4px 12px; border-color: var(--brand-500); color: var(--brand-500);">Plan'a Ekle</button>
+            </div>
+          </div>
+          
+          <div class="flex justify-between items-center mb-2" style="background: #fff; padding: 16px; border-radius: var(--radius-sm); border: 1px solid var(--ink-200); transition: 0.2s;" onmouseover="this.style.borderColor='var(--brand-500)'; this.style.boxShadow='var(--shadow-sm)';" onmouseout="this.style.borderColor='var(--ink-200)'; this.style.boxShadow='none';">
+            <div style="flex: 1;">
+              <div class="depot-label nevzat mb-1"><span class="depot-dot"></span> Nevzat Ecza</div>
+              <div style="font-size: 12px; color: var(--ink-500); font-weight: 500;">50+ Adet</div>
+            </div>
+            <div style="flex: 1; text-align: center;">
+              <div style="font-size: 10px; font-weight: 700; color: var(--ink-400); text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.05em;">Kampanya / MF</div>
+              <div style="font-weight: 700; font-size: 13px; color: var(--ink-900);">MF 10+2</div>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: flex-end;">
+              <div class="font-mono font-weight-700" style="color: var(--mint-600); font-size: 15px; margin-bottom: 6px;">24,44 ₺</div>
+              <button class="btn btn-outline" style="font-size: 12px; padding: 4px 12px; border-color: var(--brand-500); color: var(--brand-500);">Plan'a Ekle</button>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+      <div class="drawer-footer">
+        <button class="btn btn-outline" style="flex: 1;" onclick="closeDrawer()">İptal</button>
+        <button class="btn btn-brand" style="flex: 1;" onclick="closeDrawer()">Değişiklikleri Kaydet</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div id="page-settings" class="page">
+      <div style="padding: 48px; max-width: 1200px; margin: 0 auto;">
+        <button class="btn btn-ghost mb-6" onclick="switchMock('home')" style="padding: 0; font-size: 15px;"><span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span> Ana Sayfaya Dön</button>
+        
+        <h1 style="font-size: 36px; margin-bottom: 32px;">Ayarlar</h1>
+        
+        <div class="search-layout" style="background: transparent; height: auto;">
+          <!-- Settings Sidebar -->
+          <div style="width: 280px; margin-right: 32px;">
+            <div style="background: #fff; border: 1px solid var(--ink-200); border-radius: var(--radius-lg); overflow: hidden;">
+              <div style="padding: 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--ink-100); background: var(--brand-50); color: var(--brand-600); cursor: pointer;" class="flex items-center gap-3">
+                <span class="material-symbols-outlined">api</span> Depo Entegrasyonları
+              </div>
+              <div style="padding: 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--ink-100); color: var(--ink-700); cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='transparent'" class="flex items-center gap-3">
+                <span class="material-symbols-outlined">tune</span> Sipariş Tercihleri
+              </div>
+              <div style="padding: 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--ink-100); color: var(--ink-700); cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--ink-50)'" onmouseout="this.style.background='transparent'" class="flex items-center gap-3">
+                <span class="material-symbols-outlined">manage_accounts</span> Hesap Bilgileri
+              </div>
+            </div>
+          </div>
+          
+          <!-- Settings Content -->
+          <div style="flex: 1;">
+            <div class="card" style="padding: 32px;">
+              <div class="flex justify-between items-center mb-6 pb-6" style="border-bottom: 1px solid var(--ink-200);">
+                <div>
+                  <h2 style="font-size: 24px; margin-bottom: 4px;">Depo Entegrasyonları</h2>
+                  <p style="color: var(--ink-500); font-size: 14px;">B2B web servisleri için kullanıcı adı ve şifrelerinizi yönetin.</p>
+                </div>
+                <button class="btn btn-brand" style="padding: 10px 20px;">Tümünü Kaydet</button>
+              </div>
+              
+              <!-- Selcuk Ecza -->
+              <div class="mb-6 pb-6" style="border-bottom: 1px dashed var(--ink-200);">
+                <div class="flex justify-between items-center mb-4">
+                  <div class="flex items-center gap-3">
+                    <div class="depot-label selcuk" style="font-size: 16px;"><span class="depot-dot" style="width:12px; height:12px;"></span> Selçuk Ecza</div>
+                    <span class="badge" style="background: rgba(16,185,129,0.1); color: var(--mint-600);">Bağlı</span>
+                  </div>
+                  <label class="flex items-center gap-2 cursor-pointer" style="font-weight: 600; font-size: 14px;">
+                    <input type="checkbox" checked style="width: 18px; height: 18px; accent-color: var(--mint-500);"> Aktif
+                  </label>
+                </div>
+                <div class="dashboard-grid" style="gap: 16px;">
+                  <div class="form-group mb-0">
+                    <label>Kullanıcı Adı / GLN</label>
+                    <input type="text" class="input" value="8690000000000">
+                  </div>
+                  <div class="form-group mb-0">
+                    <label>Şifre</label>
+                    <input type="password" class="input" value="12345678">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Anadolu Pharma -->
+              <div class="mb-6 pb-6" style="border-bottom: 1px dashed var(--ink-200);">
+                <div class="flex justify-between items-center mb-4">
+                  <div class="flex items-center gap-3">
+                    <div class="depot-label pharma" style="font-size: 16px;"><span class="depot-dot" style="width:12px; height:12px;"></span> Anadolu Pharma</div>
+                    <span class="badge" style="background: rgba(16,185,129,0.1); color: var(--mint-600);">Bağlı</span>
+                  </div>
+                  <label class="flex items-center gap-2 cursor-pointer" style="font-weight: 600; font-size: 14px;">
+                    <input type="checkbox" checked style="width: 18px; height: 18px; accent-color: var(--mint-500);"> Aktif
+                  </label>
+                </div>
+                <div class="dashboard-grid" style="gap: 16px;">
+                  <div class="form-group mb-0">
+                    <label>Müşteri Kodu</label>
+                    <input type="text" class="input" value="AP-4582">
+                  </div>
+                  <div class="form-group mb-0">
+                    <label>Şifre</label>
+                    <input type="password" class="input" value="********">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Alliance -->
+              <div class="mb-6 pb-6">
+                <div class="flex justify-between items-center mb-4">
+                  <div class="flex items-center gap-3">
+                    <div class="depot-label alliance" style="font-size: 16px;"><span class="depot-dot" style="width:12px; height:12px;"></span> Alliance Healthcare</div>
+                    <span class="badge" style="background: var(--ink-100); color: var(--ink-500);">Bağlı Değil</span>
+                  </div>
+                  <label class="flex items-center gap-2 cursor-pointer" style="font-weight: 600; font-size: 14px; opacity: 0.5;">
+                    <input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--mint-500);"> Aktif
+                  </label>
+                </div>
+                <div class="dashboard-grid" style="gap: 16px;">
+                  <div class="form-group mb-0">
+                    <label>GLN Numarası</label>
+                    <input type="text" class="input" placeholder="Girilmedi">
+                  </div>
+                  <div class="form-group mb-0">
+                    <label>Şifre</label>
+                    <input type="password" class="input" placeholder="Girilmedi">
+                  </div>
+                </div>
+                <button class="btn btn-outline mt-4" style="font-size: 13px;">Bilgileri Doğrula</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Left Drawer Overlay (Bulk Actions) -->
+  <div id="bulk-drawer-overlay" class="drawer-overlay" onclick="closeBulkDrawer()"></div>
+  <div id="bulk-drawer" class="drawer-left">
+    <div class="drawer-header">
+      <div>
+        <h2 style="font-size: 20px; line-height: 1.2; margin-bottom: 4px;">Detaylı İnceleme</h2>
+        <div style="font-size: 13px; color: var(--ink-500);">Toplu Arama > Eşleşen Ürün</div>
+      </div>
+      <button class="btn-icon" onclick="closeBulkDrawer()"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="drawer-body">
+      
+      <div class="flex items-start gap-4 mb-6">
+        <div style="width: 64px; height: 64px; background: #fff; border: 1px dashed var(--ink-300); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; color: var(--ink-300); flex-shrink: 0;" title="İlaç Görseli">
+          <span class="material-symbols-outlined" style="font-size: 24px;">image</span>
+        </div>
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700; color: var(--ink-900); margin-bottom: 4px;">PIROFEN 120 MG 150 ML PED SRP.</h3>
+          <div class="flex gap-2 mb-2">
+            <span class="badge badge-outline" style="font-size: 11px;">Barkod: 8699525707703</span>
+          </div>
+          <div style="font-size: 12px; color: var(--ink-500); font-family: var(--font-mono);">↳ "Pirofen 120 ped srp 5 adet"</div>
+        </div>
+      </div>
+      
+      <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--ink-700);">Diğer Depo Teklifleri</h3>
+      
+      <div class="card mb-4" style="padding: 16px; border-color: var(--mint-500); background: var(--mint-50);">
+        <div class="flex justify-between items-center mb-4 pb-4" style="border-bottom: 1px solid rgba(16,185,129,0.2);">
+          <div class="depot-label pharma"><span class="depot-dot"></span> Anadolu Pharma</div>
+          <div class="font-mono font-weight-700 text-success" style="font-size: 18px;">23,33 ₺</div>
+        </div>
+        <div class="flex justify-between items-center">
+          <div>
+             <div style="font-size: 11px; font-weight: 700; color: var(--mint-600); text-transform: uppercase;">Mevcut MF</div>
+             <div style="font-size: 14px; font-weight: 700; color: var(--ink-900);">10+12</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px; background: #fff; border-color: rgba(16,185,129,0.3); color: var(--mint-600);"><span class="material-symbols-outlined" style="font-size: 16px;">calculate</span> MF Değiştir</button>
+            <button class="btn btn-brand" style="font-size: 12px; padding: 6px 12px;">Seçili (Aktif)</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card mb-4" style="padding: 16px;">
+        <div class="flex justify-between items-center mb-4 pb-4" style="border-bottom: 1px solid var(--ink-100);">
+          <div class="depot-label itriyat"><span class="depot-dot"></span> Anadolu İtriyat</div>
+          <div class="font-mono font-weight-700" style="font-size: 18px;">24,44 ₺</div>
+        </div>
+        <div class="flex justify-between items-center">
+          <div>
+             <div style="font-size: 11px; font-weight: 700; color: var(--ink-400); text-transform: uppercase;">Mevcut MF</div>
+             <div style="font-size: 14px; font-weight: 700; color: var(--ink-900);">10+11</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px;"><span class="material-symbols-outlined" style="font-size: 16px;">calculate</span> MF Seç</button>
+            <button class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; color: var(--brand-600); border-color: rgba(220, 38, 38, 0.3);">Bu Depoyu Seç</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4" style="padding: 16px;">
+        <div class="flex justify-between items-center mb-4 pb-4" style="border-bottom: 1px solid var(--ink-100);">
+          <div class="depot-label sentez"><span class="depot-dot"></span> Sentez B2B</div>
+          <div class="font-mono font-weight-700" style="font-size: 18px;">30,19 ₺</div>
+        </div>
+        <div class="flex justify-between items-center">
+          <div>
+             <div style="font-size: 11px; font-weight: 700; color: var(--ink-400); text-transform: uppercase;">Mevcut MF</div>
+             <div style="font-size: 14px; font-weight: 700; color: var(--ink-900);">10+7</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline" style="font-size: 12px; padding: 6px 10px;"><span class="material-symbols-outlined" style="font-size: 16px;">calculate</span> MF Seç</button>
+            <button class="btn btn-outline" style="font-size: 12px; padding: 6px 12px; color: var(--brand-600); border-color: rgba(220, 38, 38, 0.3);">Bu Depoyu Seç</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-outline" style="width: 100%; border-color: var(--ink-300);" onclick="switchMock('search-variants'); closeBulkDrawer()">Tüm Formlara (Varyantlara) Gözat</button>
+
+    </div>
+  </div>
+
+  <script>
+    function switchMock(pageId) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + pageId).classList.add('active');
+    }
+    
+    function openDrawer() {
+      document.getElementById('edit-drawer-overlay').classList.add('open');
+      document.getElementById('edit-drawer').classList.add('open');
+    }
+    
+    function closeDrawer() {
+      document.getElementById('edit-drawer-overlay').classList.remove('open');
+      document.getElementById('edit-drawer').classList.remove('open');
+    }
+
+    function openBulkDrawer() {
+      document.getElementById('bulk-drawer-overlay').classList.add('open');
+      document.getElementById('bulk-drawer').classList.add('open');
+    }
+    
+    function closeBulkDrawer() {
+      document.getElementById('bulk-drawer-overlay').classList.remove('open');
+      document.getElementById('bulk-drawer').classList.remove('open');
+    }
+  </script>
+  <script src="./scripts/utils.js"></script>
+  <script src="./scripts/runtime-coordinator.js"></script>
+  <script src="./scripts/security-guards.js"></script>
+  <script src="./scripts/operation-identity.js"></script>
+  <script src="./scripts/app-runtime.js"></script>
+  <script src="./scripts/navigation-runtime.js"></script>
+  <script src="./scripts/search-domain.js"></script>
+  <script src="./scripts/offer-domain.js"></script>
+  <script src="./scripts/app-actions.js"></script>
+  <script src="./scripts/plan-domain.js"></script>
+  <script src="./scripts/plan-ui.js"></script>
+  <script src="./scripts/search-ui.js"></script>
+  <script src="./scripts/bulk-ui.js"></script>
+  <script src="./scripts/shell-ui.js"></script>
+  <script src="./scripts/detail-ui.js"></script>
+  <script src="./scripts/operation-state.js"></script>
+  <script src="./scripts/plan-mutations.js"></script>
+  <script src="./scripts/app-v231.js"></script>
+</body>
+</html>

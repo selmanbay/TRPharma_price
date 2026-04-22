@@ -1,0 +1,68 @@
+{
+  "name": "eczane-app-v2-3-1",
+  "version": "2.3.1-dev",
+  "private": true,
+  "description": "Eczane App V2.3.1 clean modular workspace runtime",
+  "main": "main.js",
+  "scripts": {
+    "start": "node ../../node_modules/electron/cli.js .",
+    "dev": "node ../../node_modules/electron/cli.js . --dev",
+    "server": "node src/server.js",
+    "test:health": "node scripts/test-backend-cli.js health",
+    "test:backend": "node scripts/test-backend-cli.js",
+    "test:scenario": "node scripts/test-scenario-runner.js",
+    "test:consistency": "node scripts/test-consistency-runner.js",
+    "check:main": "node --check main.js",
+    "check:preload": "node --check preload.js",
+    "check:server": "node --check src/server.js",
+    "check:app": "node --check renderer/scripts/app.js",
+    "check": "npm run check:main && npm run check:preload && npm run check:server && npm run check:app",
+    "mojibake:check": "node ../current-modular/scripts/check-mojibake.js",
+    "mojibake:fix": "node ../current-modular/scripts/fix-mojibake.js",
+    "release:check": "node ../current-modular/scripts/validate-release.js",
+    "build": "node ../../node_modules/electron-builder/out/cli/cli.js",
+    "build:win": "npm run release:check && node ../../node_modules/electron-builder/out/cli/cli.js --win --x64"
+  },
+  "author": "Selman Bay",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
+    "electron-updater": "^6.8.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.eczane.app.v231",
+    "productName": "Eczane V2.3.1",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*"
+    ]
+  }
+}
